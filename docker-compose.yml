@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: cprt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cprt_aco
+    ports:
+      - "5432:5432"
+    volumes:
+      - cprt_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  cprt_postgres_data:
