@@ -314,13 +314,19 @@ const DB={ok:false,db:null,mem:[],
      r.onupgradeneeded=()=>r.result.createObjectStore('rec',{keyPath:'id'});
      r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onblocked=()=>rej(new Error('blocked'));});
    this.ok=true;
+   // Limpeza automática única para purgar do celular fotos pesadas de versões anteriores
+   if(localStorage.getItem('cprt_db_cleaned_v6')!=='1'){
+    try{await this.clear();}catch(e){}
+    try{localStorage.setItem('cprt_db_cleaned_v6','1');}catch(e){}
+   }
   }catch(e){this.ok=false;}
  },
  tx(mode,fn){return new Promise((res,rej)=>{const t=this.db.transaction('rec',mode);const st=t.objectStore('rec');const rq=fn(st);
    t.oncomplete=()=>res(rq&&rq.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});},
  async all(){ if(!this.ok) return this.mem.slice(); try{return await this.tx('readonly',s=>s.getAll())||[];}catch(e){this.ok=false;return this.mem.slice();} },
  async put(r){ if(this.ok){try{await this.tx('readwrite',s=>s.put(r));return;}catch(e){this.ok=false;}} this.mem=this.mem.filter(x=>x.id!==r.id);this.mem.push(r); },
- async del(id){ if(this.ok){try{await this.tx('readwrite',s=>s.delete(id));return;}catch(e){this.ok=false;}} this.mem=this.mem.filter(x=>x.id!==id); }
+ async del(id){ if(this.ok){try{await this.tx('readwrite',s=>s.delete(id));return;}catch(e){this.ok=false;}} this.mem=this.mem.filter(x=>x.id!==id); },
+ async clear(){ if(this.ok){try{await this.tx('readwrite',s=>s.clear());}catch(e){}} this.mem=[]; }
 };
 const Cfg={mem:{},get(k){try{return localStorage.getItem('cprt-aco-'+k)||this.mem[k]||''}catch(e){return this.mem[k]||''}},
  set(k,v){this.mem[k]=v;try{localStorage.setItem('cprt-aco-'+k,v)}catch(e){}}};
@@ -338,16 +344,32 @@ function calc(f){
 }
 
 /* ============ fotos ============ */
-function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=u;});}
+function loadImg(file){
+ return new Promise((res,rej)=>{
+  const u=URL.createObjectURL(file);
+  const im=new Image();
+  im.onload=()=>{URL.revokeObjectURL(u);res(im);};
+  im.onerror=e=>{URL.revokeObjectURL(u);rej(e);};
+  im.src=u;
+ });
+}
 async function processPhoto(file,key){
  let src;
- try{src=await createImageBitmap(file,{imageOrientation:'from-image'});}catch(e){src=await loadImg(file);}
+ try{
+  // Tenta decodificar o JPEG diretamente redimensionado na CPU/GPU nativa do Android (poupa >80% de RAM)
+  src=await createImageBitmap(file,{imageOrientation:'from-image',resizeWidth:1280,resizeQuality:'medium'});
+ }catch(e){
+  try{src=await createImageBitmap(file,{imageOrientation:'from-image'});}catch(e2){src=await loadImg(file);}
+ }
  const sw=src.width||src.naturalWidth,sh=src.height||src.naturalHeight;
- const sc=Math.min(1,1400/Math.max(sw,sh));
+ const sc=Math.min(1,1280/Math.max(sw,sh));
  const w=Math.round(sw*sc),h=Math.round(sh*sc);
  const c=document.createElement('canvas');c.width=w;c.height=h;
  const x=c.getContext('2d');
  x.drawImage(src,0,0,w,h);
+ if(src.close)try{src.close()}catch(e){}
+ if(src.src)src.src='';
+
  const fs=Math.max(13,Math.round(h*0.022)),ph=Math.round(fs*2.6),pad=Math.round(fs*0.8);
  x.fillStyle='rgba(14,26,43,0.88)';
  x.fillRect(0,h-ph,w,ph);
@@ -360,14 +382,27 @@ async function processPhoto(file,key){
  x.font='500 '+Math.round(fs*.88)+'px Barlow, Arial, sans-serif';
  const line2=at.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'medium'})+' · CPRT '+(S.patio?'Pátio '+S.patio:'Pátio')+((Auth.user?Auth.user.nome:S.form.controlador)?' · '+(Auth.user?Auth.user.nome:S.form.controlador):'');
  x.fillText(line2,pad,h-ph+Math.round(fs*1.75));
- const data=c.toDataURL('image/jpeg',0.74);
+
+ // Miniatura leve para a lista de histórico (máx 96px, ~2KB)
+ let thumb=null;
+ try{
+  const tw=Math.min(96,w),th=Math.round(tw*(h/w));
+  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+  const tx=tc.getContext('2d');
+  tx.drawImage(c,0,0,tw,th);
+  thumb=tc.toDataURL('image/jpeg',0.6);
+  tc.width=0;tc.height=0;
+ }catch(e){}
+
+ const data=c.toDataURL('image/jpeg',0.72);
  let code=null;
  if(key==='etiqueta'&&'BarcodeDetector' in window){
   try{const bd=new BarcodeDetector();const r=await bd.detect(c);if(r&&r[0]&&r[0].rawValue)code=r[0].rawValue;}catch(e){}
  }
- const raw=await new Promise(r=>c.toBlob(r,'image/jpeg',0.74));
- if(src.close)try{src.close()}catch(e){}
- return {photo:{data,w,h,at:at.toISOString()},code,raw};
+ const raw=await new Promise(r=>c.toBlob(r,'image/jpeg',0.72));
+ // Limpa buffer do canvas principal para liberar GPU/RAM
+ c.width=0;c.height=0;
+ return {photo:{data,w,h,at:at.toISOString(),thumb},code,raw,thumb};
 }
 
 /* ============ validação ============ */
@@ -670,10 +705,16 @@ async function sincronizarRegistrosComBanco(){
   if(res.ok){
    const data=await res.json();
    if(data.registros&&Array.isArray(data.registros)){
-    for(const r of data.registros){
+    // Guarda apenas os 50 registros mais recentes no IndexedDB local para manter o celular ultraleve
+    const recentes = data.registros.slice(0, 50);
+    for(const r of recentes){
      await DB.put(r);
     }
-    S.records=(await DB.all()).sort((a,b)=>a.at<b.at?1:-1);
+    S.records=data.registros.slice().sort((a,b)=>a.at<b.at?1:-1);
+    // Para poupar memória RAM no celular, remove referências pesadas de fotos antigas da memória ativa
+    S.records.forEach(r=>{
+     if(r.has_photos&&r.photos) delete r.photos;
+    });
     render();
    }
   }
@@ -826,7 +867,9 @@ function filtered(){
  return S.records.filter(r=>(S.filter==='all'||r.op===S.filter)&&(!S.from||dkey(r.at)>=S.from)&&(!S.to||dkey(r.at)<=S.to)&&(S.fp==='all'||r.patio===S.fp)&&(!q||[r.protocolo,r.placa,r.motorista,r.os,r.desenho,r.elemento,r.destino,r.cod,r.cpt,r.empresa,r.material,r.ordem,r.descricao,r.marca,r.corrida,r.feixe,r.lote,r.patio].join(' ').toLowerCase().includes(q)));
 }
 function recItem(r){
- return '<button class="rec" data-act="open" data-id="'+r.id+'"><span class="th"><img src="'+r.photos.etiqueta.data+'" alt=""></span><span><span class="l1"><span class="pill '+r.op+'">'+OPS[r.op].label+'</span><span class="pr">'+esc(r.placa)+'</span></span>'+
+ const thImg=r.thumb||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.thumb)||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data)||'';
+ const thHtml=thImg?'<img src="'+thImg+'" alt="">':ic('tag');
+ return '<button class="rec" data-act="open" data-id="'+r.id+'"><span class="th">'+thHtml+'</span><span><span class="l1"><span class="pill '+r.op+'">'+OPS[r.op].label+'</span><span class="pr">'+esc(r.placa)+'</span></span>'+
  '<span class="l2" style="display:block">'+(r.prod==='barra'?'Barra reta '+nf(r.bitola,1)+' mm × '+nf(r.comp/100,0)+' m'+(r.feixe?' · Feixe '+esc(r.feixe):''):r.prod==='cord'?'Cordoalha '+nf(r.bitola,1)+' mm · '+nf(r.m,0)+' m'+(r.ordem?' · OP '+esc(r.ordem):''):'OS '+esc(r.os)+(r.elemento?' · '+esc(r.elemento):'')+' · '+nf(r.bitola,1)+' mm × '+r.qtd)+'</span><span class="l2" style="display:block">'+esc(r.motorista)+' · '+fdt(r.at)+(r.patio?' · '+esc(r.patio):'')+'</span></span>'+
  '<span class="kg">'+(r.kg!=null?nf(r.kg,0):'—')+'<small>kg</small></span></button>';
 }
@@ -883,11 +926,32 @@ function confirmBox(msg,okLabel){
   $('#cb-no').onclick=()=>{closeLayer();res(false)};$('#cb-ok').onclick=()=>{closeLayer();res(true)};$('#cb-no').focus();
  });
 }
-function openRecord(id){
- const r=S.records.find(x=>x.id===id);if(!r)return;
+async function carregarFotosRegistro(r){
+ if(!r||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data))return r;
+ try{
+  const res=await fetch('/api/registros/'+encodeURIComponent(r.id)+'/fotos',{
+   headers:Auth.token?{'authorization':'Bearer '+Auth.token}:{}
+  });
+  if(res.ok){
+   const d=await res.json();
+   if(d.photos)r.photos=d.photos;
+  }
+ }catch(e){}
+ return r;
+}
+async function openRecord(id){
+ let r=S.records.find(x=>x.id===id);if(!r)return;
+ if(!r.photos||!r.photos.etiqueta||!r.photos.etiqueta.data){
+  toast('Carregando fotos...');
+  r=await carregarFotosRegistro(r);
+ }
  const podeExcluir = userPodeExcluir(Auth.user);
  const btnExcluir = podeExcluir ? '<button class="btn danger" data-act="delete" data-id="'+r.id+'">'+ic('trash')+'Excluir</button>' : '';
- sheet(r.protocolo,'<div class="photos3">'+['etiqueta','placa','cracha'].map(k=>'<figure><img src="'+r.photos[k].data+'" alt="'+esc(PH[k].t)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Crachá'})[k]+'</figcaption></figure>').join('')+'</div><div class="card pad mt">'+dlHtml(r)+'</div>',
+ const temFotos=r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data;
+ const phHtml=temFotos
+  ? '<div class="photos3">'+['etiqueta','placa','cracha'].map(k=>'<figure><img src="'+(r.photos[k]?r.photos[k].data:'')+'" alt="'+esc(PH[k].t)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Crachá'})[k]+'</figcaption></figure>').join('')+'</div>'
+  : '<div class="note">Fotos detalhadas não disponíveis offline.</div>';
+ sheet(r.protocolo,phHtml+'<div class="card pad mt">'+dlHtml(r)+'</div>',
  '<div class="row mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button>'+btnExcluir+'</div>');
 }
 function zoom(src){layer.insertAdjacentHTML('beforeend','<div class="lightbox" data-act="closezoom"><button class="iconbtn" aria-label="Fechar imagem" data-act="closezoom">'+ic('x')+'</button><img src="'+src+'" alt="Foto ampliada"></div>');}
@@ -908,7 +972,11 @@ function csvOf(list){
 }
 function comprovanteHtml(r){
  const rows=recRows(r).map(x=>'<tr><th>'+esc(x[0])+'</th><td>'+esc(x[1])+'</td></tr>').join('');
- const ph=['etiqueta','placa','cracha'].map(k=>'<figure><img src="'+r.photos[k].data+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa do caminhão',cracha:'Crachá do motorista'})[k]+' · '+fdt(r.photos[k].at)+'</figcaption></figure>').join('');
+ const ph=['etiqueta','placa','cracha'].map(k=>{
+  const p=r.photos&&r.photos[k];
+  if(!p||!p.data)return '';
+  return '<figure><img src="'+p.data+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa do caminhão',cracha:'Crachá do motorista'})[k]+(p.at?' · '+fdt(p.at):'')+'</figcaption></figure>';
+ }).join('');
  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante '+esc(r.protocolo)+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#0E1A2B;max-width:820px;margin:24px auto;padding:0 16px}header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #F2A900;padding-bottom:10px}h1{font-size:20px;margin:0;text-transform:uppercase;letter-spacing:.04em}.p{font-size:26px;font-weight:700;letter-spacing:.06em}.s{font-size:12px;color:#586577}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}th{width:36%;text-align:left;background:#F3F5F8;padding:7px 10px;border:1px solid #D3D9E1}td{padding:7px 10px;border:1px solid #D3D9E1;font-weight:600}.ph{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}figure{margin:0}img{width:100%;border-radius:6px;border:1px solid #D3D9E1}figcaption{font-size:11px;color:#586577;margin-top:4px}.sg{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:56px;font-size:12px;text-align:center}.sg div{border-top:1px solid #0E1A2B;padding-top:6px}</style></head><body><header><div><h1>Comprovante de '+esc(OPS[r.op].label)+' de material</h1><div class="s">CPRT · Pátio '+esc(r.patio||'—')+'</div></div><div class="p">'+esc(r.protocolo)+'</div></header><table>'+rows+'</table><div class="ph">'+ph+'</div><div class="sg"><div>Controlador: '+esc(r.controlador)+'</div><div>Motorista: '+esc(r.motorista)+'</div></div></body></html>';
 }
 
@@ -918,7 +986,14 @@ function nextProto(op){
  let mx=0;S.records.forEach(r=>{if(r.protocolo.indexOf(base)===0)mx=Math.max(mx,parseInt(r.protocolo.slice(base.length),10)||0)});
  return base+String(mx+1).padStart(4,'0');
 }
-function resetForm(){S.auto={};S.ai={};S.prod='aco';S.prodManual=false;S.op=null;S.photos={etiqueta:null,placa:null,cracha:null};S.busy={};S.errs={};S.summary=null;S.form={controlador:Auth.user?Auth.user.nome:Cfg.get('nome')};S.submitting=false;}
+function resetForm(){
+ S.auto={};S.ai={};S.prod='aco';S.prodManual=false;S.op=null;
+ S.photos={etiqueta:null,placa:null,cracha:null};
+ lastRaw=null;
+ S.busy={};S.errs={};S.summary=null;
+ S.form={controlador:Auth.user?Auth.user.nome:Cfg.get('nome')};
+ S.submitting=false;
+}
 
 async function submit(){
  if(S.submitting)return;
@@ -931,6 +1006,7 @@ async function submit(){
   controlador:(Auth.user?Auth.user.nome:f.controlador).trim(),patio:S.patio,prod:S.prod||'aco',os:f.os||'',ordem:f.ordem||'',cod:f.cod||'',cpt:(f.cpt||'').toUpperCase(),desenho:f.desenho||'',posicao:f.posicao||'',cj:f.cj||'',elemento:(f.elemento||'').toUpperCase(),
   bitola:S.prod==='cord'?String(numBR(f.diametro)):f.bitola,aco:(S.prod==='cord'?f.classe:S.prod==='barra'?f.categoria:f.aco)||'',comp:S.prod==='cord'?null:S.prod==='barra'?numBR(f.compm)*100:parseFloat(String(f.comp).replace(',','.')),qtd:S.prod==='cord'?1:S.prod==='barra'?(parseInt(f.qtd,10)||Math.max(1,Math.round(c.nb||1))):parseInt(f.qtd,10),marca:f.marca||'',corrida:f.corrida||'',feixe:f.feixe||'',lote:f.lote||'',barrasContadas:S.prod==='barra'&&parseInt(f.qtd,10)>0,m:c.m,kg:c.kg,material:f.material||'',descricao:f.descricao||'',norma:f.norma||'',torcao:f.torcao||'',resist:f.resist||'',pbruto:S.prod==='cord'?(numBR(f.pbruto)||null):null,espessura:f.espessura||'',re:f.re||'',datafab:f.datafab||'',
   placa:f.placa,motorista:f.motorista.trim(),empresa:(f.empresa||'').trim(),cracha:(f.cracha||'').trim(),destino:f.destino.trim(),autorizador:f.autorizador.trim(),obs:(f.obs||'').trim(),
+  thumb: (S.photos.etiqueta && S.photos.etiqueta.thumb) ? S.photos.etiqueta.thumb : null,
   photos:{etiqueta:S.photos.etiqueta,placa:S.photos.placa,cracha:S.photos.cracha}};
 
  await DB.put(r);
@@ -956,7 +1032,11 @@ async function onCapture(inp){
   if(r.code&&!S.form.cod){S.form.cod=r.code;const el=$('#f-cod');if(el)el.value=r.code;toast('Código de barras lido: '+r.code);}
  }catch(e){toast('Não foi possível processar a foto. Tente de novo.');}
  S.busy[k]=false;inp.value='';refreshPhotos();
- if(S.photos[k]&&lastRaw)autofill(k,lastRaw);
+ if(S.photos[k]&&lastRaw){
+  const rawCopy=lastRaw;
+  lastRaw=null;
+  autofill(k,rawCopy);
+ }
 }
 let lastRaw=null;
 
@@ -1056,7 +1136,16 @@ document.addEventListener('click',async ev=>{
  if(a==='prod'){S.prod=t.dataset.p;S.prodManual=true;delete S.auto.prod;renderDados();return;}
  if(a==='resetop'){if(S.photos.etiqueta||S.photos.placa||S.photos.cracha||S.form.os){if(!await confirmBox('Trocar a operação descarta as fotos e dados preenchidos.','Descartar e trocar'))return;}resetForm();render();return;}
  if(a==='zoom'){zoom(S.photos[t.dataset.k].data);return;}
- if(a==='zoomrec'){const r=S.records.find(x=>x.id===t.dataset.id);if(r)zoom(r.photos[t.dataset.k].data);return;}
+ if(a==='zoomrec'){
+  let r=S.records.find(x=>x.id===t.dataset.id);
+  if(r){
+   if(!r.photos||!r.photos[t.dataset.k]||!r.photos[t.dataset.k].data){
+    r=await carregarFotosRegistro(r);
+   }
+   if(r&&r.photos&&r.photos[t.dataset.k]&&r.photos[t.dataset.k].data)zoom(r.photos[t.dataset.k].data);
+  }
+  return;
+ }
  if(a==='submit'){submit();return;}
  if(a==='again'){S.done=null;resetForm();render();window.scrollTo(0,0);return;}
  if(a==='gohist'){S.tab='hist';render();window.scrollTo(0,0);sincronizarRegistrosComBanco();return;}
@@ -1091,7 +1180,17 @@ document.addEventListener('click',async ev=>{
   }
   return;
  }
- if(a==='comprovante'){const r=S.records.find(x=>x.id===t.dataset.id);if(r)saveFile('comprovante-'+r.protocolo+'.html',comprovanteHtml(r),'text/html');return;}
+ if(a==='comprovante'){
+  let r=S.records.find(x=>x.id===t.dataset.id);
+  if(r){
+   if(!r.photos||!r.photos.etiqueta||!r.photos.etiqueta.data){
+    toast('Baixando fotos para o comprovante...');
+    r=await carregarFotosRegistro(r);
+   }
+   saveFile('comprovante-'+r.protocolo+'.html',comprovanteHtml(r),'text/html');
+  }
+  return;
+ }
  if(a==='csv'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(filtered()),'text/csv');return;}
  if(a==='csv-all'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(S.records),'text/csv');return;}
  if(a==='copyexp'){const ta=$('#exp');try{await navigator.clipboard.writeText(ta.value);toast('Copiado.');}catch(e){ta.select();toast('Selecione e copie (Ctrl+C).');}return;}
@@ -1108,6 +1207,9 @@ document.addEventListener('click',async ev=>{
   if(await confirmBox('Deseja realmente sair da sua conta?','Sair')){
    fetch('/api/auth/logout',{method:'POST',headers:{'authorization':'Bearer '+Auth.token}}).catch(()=>{});
    Auth.clear();
+   S.records=[];
+   resetForm();
+   S.done=null;
    render();
    toast('Você saiu do sistema.');
   }

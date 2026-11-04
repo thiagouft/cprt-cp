@@ -1,5 +1,5 @@
 // Guarda a casca do app para abrir rápido e funcionar sem sinal.
-const V = 'cprt-aco-v5', ARQ = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
+const V = 'cprt-aco-v6', ARQ = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(caches.open(V).then(c => c.addAll(ARQ)));

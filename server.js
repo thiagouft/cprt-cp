@@ -28,7 +28,7 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 3334);
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 const BASE = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
@@ -383,7 +383,8 @@ async function excluirUsuario(req, res, user, id) {
 async function listarRegistros(req, res, user) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
   try {
-    const r = await pool.query('SELECT * FROM registros ORDER BY at DESC LIMIT 1000');
+    // Não carrega a coluna 'photos' na listagem para poupar dezenas de megabytes de RAM no cliente
+    const r = await pool.query('SELECT id, protocolo, op, at, controlador, patio, prod, dados, (photos IS NOT NULL AND photos != \'{}\'::jsonb) AS has_photos FROM registros ORDER BY at DESC LIMIT 1000');
     const registros = r.rows.map(row => {
       const rec = Object.assign({}, row.dados, {
         id: row.id,
@@ -393,7 +394,7 @@ async function listarRegistros(req, res, user) {
         controlador: row.controlador,
         patio: row.patio,
         prod: row.prod,
-        photos: row.photos || {}
+        has_photos: row.has_photos
       });
       return rec;
     });
@@ -401,6 +402,18 @@ async function listarRegistros(req, res, user) {
   } catch (e) {
     console.error('Erro ao listar registros:', e);
     return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
+async function obterFotosRegistro(req, res, user, id) {
+  if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
+  try {
+    const r = await pool.query('SELECT photos FROM registros WHERE id = $1', [id]);
+    if (!r.rows.length) return json(res, 404, { erro: 'Registro não encontrado.' });
+    return json(res, 200, { ok: true, photos: r.rows[0].photos || {} });
+  } catch (e) {
+    console.error('Erro ao buscar fotos do registro:', e);
+    return json(res, 500, { erro: 'Erro ao buscar fotos do registro.' });
   }
 }
 
@@ -501,6 +514,10 @@ const server = http.createServer(async (req, res) => {
   // Registros
   if (p === '/api/registros' && req.method === 'GET') return listarRegistros(req, res, user);
   if (p === '/api/registros' && req.method === 'POST') return salvarRegistro(req, res, user);
+  if (p.startsWith('/api/registros/') && p.endsWith('/fotos') && req.method === 'GET') {
+    const id = p.split('/')[3];
+    return obterFotosRegistro(req, res, user, id);
+  }
   if (p.startsWith('/api/registros/') && req.method === 'DELETE') {
     const id = p.split('/')[3];
     return excluirRegistro(req, res, user, id);
