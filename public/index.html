@@ -292,6 +292,12 @@ function userPodeExcluir(u){
  return u.pode_excluir === true || u.pode_excluir === 'true' || u.pode_excluir === 1;
 }
 
+function userPodeGerenciarUsuarios(u){
+ if(!u) return false;
+ if(u.login==='admin' || u.role==='admin') return true;
+ return u.pode_gerenciar_usuarios === true || u.pode_gerenciar_usuarios === 'true' || u.pode_gerenciar_usuarios === 1;
+}
+
 const KGM={'5.0':0.154,'6.3':0.245,'8.0':0.395,'10.0':0.617,'12.5':0.963,'16.0':1.578,'20.0':2.466,'25.0':3.853,'32.0':6.313,'40.0':9.865};
 const ACOS=['CA-50S','CA-60','CA-25'];
 const ELEM=['PILAR','BLOCO','SAPATA','ESTACA','VIGA','LAJE','TRAVESSA','ENCONTRO','CORTINA','LONGARINA','TRANSVERSINA'];
@@ -459,7 +465,7 @@ function renderTabs(){
  $('#user-display').textContent=Auth.user.nome.split(' ')[0];
 
  const t=[['novo','plus','Registrar'],['hist','list','Histórico'],['painel','chart','Painel']];
- if(Auth.user.role==='admin'||Auth.user.login==='admin'){
+ if(userPodeGerenciarUsuarios(Auth.user)){
   t.push(['usuarios','users','Usuários']);
  }
  $('#tabs').style.gridTemplateColumns='repeat('+t.length+',1fr)';
@@ -479,6 +485,11 @@ function render(){
   return;
  }
  if(S.tab==='usuarios'){
+  if(!userPodeGerenciarUsuarios(Auth.user)){
+   S.tab='novo';
+   render();
+   return;
+  }
   view.innerHTML=vUsuarios();
   carregarListaUsuarios();
   return;
@@ -506,11 +517,8 @@ function vLogin(){
   '<input id="l-pass" type="password" placeholder="Digite sua senha" required autocomplete="current-password">'+
   '</div>'+
   '<div id="login-err" class="alert" style="display:none;margin-bottom:14px;color:var(--bad);background:var(--bad-bg);padding:10px 14px;border-radius:10px;font-size:14px"></div>'+
-  '<button type="submit" class="btn pri block" data-act="dologin" id="btn-login-submit" style="font-size:16px;font-weight:700">Entrar</button>'+
+  '<button type="submit" class="btn pri block" id="btn-login-submit" style="font-size:16px;font-weight:700">Entrar</button>'+
   '</form>'+
-  '<div style="text-align:center;margin-top:18px;font-size:12.5px;color:var(--muted)">'+
-  'Acesso padrão inicial: <b>admin</b> / <b>admin</b>'+
-  '</div>'+
   '</div></div>';
 }
 
@@ -532,7 +540,7 @@ function vMudarSenha(){
   '<input id="pwd-conf" type="password" placeholder="Digite a nova senha novamente" required autocomplete="new-password">'+
   '</div>'+
   '<div id="pwd-err" class="alert" style="display:none;margin-bottom:14px;color:var(--bad);background:var(--bad-bg);padding:10px 14px;border-radius:10px;font-size:14px"></div>'+
-  '<button type="submit" class="btn pri block" data-act="domudarsenha" id="btn-pwd-submit" style="font-size:16px;font-weight:700">Salvar Nova Senha</button>'+
+  '<button type="submit" class="btn pri block" id="btn-pwd-submit" style="font-size:16px;font-weight:700">Salvar Nova Senha</button>'+
   '</form>'+
   '</div></div>';
 }
@@ -572,8 +580,13 @@ async function doMudarSenha(){
   }
   Auth.user.trocar_senha=false;
   Auth.set(Auth.token,Auth.user);
+  S.tab='novo';
+  S.op=null;
+  S.done=null;
+  resetForm();
   toast('Senha alterada com sucesso!');
   render();
+  window.scrollTo(0,0);
   sincronizarRegistrosComBanco();
  }catch(e){
   errEl.textContent='Erro ao conectar ao servidor.';
@@ -590,7 +603,7 @@ function vUsuarios(){
  '<div class="grid">'+
  '<div class="f full"><label for="u-nome">Nome Completo</label><input id="u-nome" placeholder="Ex: Carlos Silva" required></div>'+
  '<div class="f half"><label for="u-login">Login</label><input id="u-login" placeholder="Ex: carlos.silva" required autocomplete="off"></div>'+
- '<div class="f half"><label for="u-senha">Senha</label><input id="u-senha" type="password" placeholder="Mínimo 4 caracteres" required autocomplete="new-password"></div>'+
+ '<div class="f half"><label for="u-senha">Senha Provisória</label><input id="u-senha" type="password" placeholder="Mínimo 4 caracteres" required autocomplete="new-password"></div>'+
  '<div class="f full" style="margin-top:6px">'+
  '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">'+
  '<input type="checkbox" id="u-pode-excluir" style="width:20px;height:20px;cursor:pointer">'+
@@ -598,8 +611,15 @@ function vUsuarios(){
  '</label>'+
  '<div class="hint">Se desmarcado, o operador poderá registrar e visualizar, mas não poderá excluir nada.</div>'+
  '</div>'+
+ '<div class="f full" style="margin-top:6px">'+
+ '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">'+
+ '<input type="checkbox" id="u-pode-gerenciar" style="width:20px;height:20px;cursor:pointer">'+
+ '<span>Permitir gerenciar usuários (acessar esta tela, cadastrar e resetar senhas)</span>'+
+ '</label>'+
+ '<div class="hint">Se marcado, o usuário terá permissão administrativa para criar outros operadores e resetar senhas.</div>'+
  '</div>'+
- '<div class="row mt"><button type="submit" class="btn pri block" data-act="docaduser" style="font-weight:700">'+ic('plus')+'Cadastrar Usuário</button></div>'+
+ '</div>'+
+ '<div class="row mt"><button type="submit" class="btn pri block" id="btn-cad-user" style="font-weight:700">'+ic('plus')+'Cadastrar Usuário</button></div>'+
  '</form>'+
  '</div>'+
  '<h3 style="margin:24px 0 10px;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Usuários Cadastrados</h3>'+
@@ -628,9 +648,14 @@ async function doLogin(){
    return;
   }
   Auth.set(data.token,data.usuario);
+  S.tab='novo';
+  S.op=null;
+  S.done=null;
+  resetForm();
   S.form.controlador=data.usuario.nome;
   toast('Bem-vindo, '+data.usuario.nome+'!');
   render();
+  window.scrollTo(0,0);
   sincronizarRegistrosComBanco();
  }catch(e){
   errEl.textContent='Não foi possível conectar ao servidor.';
@@ -651,20 +676,35 @@ async function carregarListaUsuarios(){
   if(!data.usuarios.length){c.innerHTML='<div class="note">Nenhum usuário cadastrado.</div>';return;}
   c.innerHTML=data.usuarios.map(u=>{
    const isEu=Auth.user&&Auth.user.id===u.id;
-   const isAdmin=u.role==='admin'||u.login==='admin';
+   const isMaster=u.login==='admin';
+   const isAdmin=u.role==='admin'||isMaster;
    const podeExcluir=!!u.pode_excluir||isAdmin;
+   const podeGerenciar=!!u.pode_gerenciar_usuarios||isAdmin;
+
+   const badgeMaster=isMaster
+    ? '<span class="pill" style="background:#0e1a2b;color:#f2a900;font-size:11px;font-weight:700">MASTER</span>'
+    : '';
+   const badgePerfil=isAdmin && !isMaster
+    ? '<span class="pill" style="font-size:11px">Admin</span>'
+    : !isMaster ? '<span class="pill" style="font-size:11px">Operador</span>' : '';
    const badgeExcluir=podeExcluir
     ? '<span class="pill ret" style="font-size:11px">Pode Excluir</span>'
     : '<span class="pill" style="font-size:11px;background:var(--surface2);color:var(--muted)">Sem Exclusão</span>';
+   const badgeGerenciar=podeGerenciar
+    ? '<span class="pill mob" style="font-size:11px">Gestor</span>'
+    : '';
 
    return '<div class="card pad" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
-    '<div><div style="font-weight:700;font-size:16px">'+esc(u.nome)+(isEu?' <small class="autotag">Você</small>':'')+'</div>'+
-    '<div class="muted" style="font-size:13px;display:flex;align-items:center;gap:8px;margin-top:2px">'+
-    '<span>Login: <b>'+esc(u.login)+'</b></span> · <span>'+(isAdmin?'Admin':'Operador')+'</span> · '+badgeExcluir+
+    '<div><div style="font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px">'+esc(u.nome)+(isEu?' <small class="autotag">Você</small>':'')+badgeMaster+'</div>'+
+    '<div class="muted" style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">'+
+    '<span>Login: <b>'+esc(u.login)+'</b></span> · '+badgePerfil+' '+badgeExcluir+(badgeGerenciar?' · '+badgeGerenciar:'')+
+    (u.trocar_senha?' · <span style="color:var(--bad);font-weight:600">Aguardando troca de senha</span>':'')+
     '</div></div>'+
-    '<div style="display:flex;align-items:center;gap:8px">'+
-    (!isAdmin?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar Exclusão':'Permitir Exclusão')+'</button>':'')+
-    (!isEu&&u.login!=='admin'?'<button class="btn danger sm" data-act="deluser" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">'+ic('trash')+'Excluir</button>':'')+
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<button class="btn sm" data-act="resetpwd" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">Resetar Senha</button>'+
+    (!isMaster?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar Exclusão':'Permitir Exclusão')+'</button>':'')+
+    (!isMaster?'<button class="btn sm" data-act="togglemanage" data-id="'+u.id+'" data-pode="'+(u.pode_gerenciar_usuarios?0:1)+'">'+(u.pode_gerenciar_usuarios?'Revogar Gestão':'Permitir Gestão')+'</button>':'')+
+    (!isEu&&!isMaster?'<button class="btn danger sm" data-act="deluser" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">'+ic('trash')+'Excluir</button>':'')+
     '</div></div>';
   }).join('');
  }catch(e){
@@ -672,27 +712,40 @@ async function carregarListaUsuarios(){
  }
 }
 
+let cadUserBusy=false;
 async function cadastrarUsuario(){
- const nome=$('#u-nome').value.trim();
- const login=$('#u-login').value.trim();
- const senha=$('#u-senha').value;
+ if(cadUserBusy)return;
+ const nome=$('#u-nome')?$('#u-nome').value.trim():'';
+ const login=$('#u-login')?$('#u-login').value.trim():'';
+ const senha=$('#u-senha')?$('#u-senha').value:'';
  const pode_excluir=!!($('#u-pode-excluir')&&$('#u-pode-excluir').checked);
+ const pode_gerenciar_usuarios=!!($('#u-pode-gerenciar')&&$('#u-pode-gerenciar').checked);
  if(!nome||!login||!senha){toast('Preencha todos os campos.');return;}
+
+ cadUserBusy=true;
+ const btn=$('#btn-cad-user');
+ if(btn){btn.disabled=true;btn.textContent='Cadastrando...';}
 
  try{
   const res=await fetch('/api/usuarios',{
    method:'POST',
    headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
-   body:JSON.stringify({nome,login,senha,pode_excluir})
+   body:JSON.stringify({nome,login,senha,pode_excluir,pode_gerenciar_usuarios})
   });
   const data=await res.json();
   if(!res.ok||!data.ok){toast(data.erro||'Erro ao criar usuário.');return;}
   toast('Usuário cadastrado com sucesso!');
-  $('#u-nome').value='';$('#u-login').value='';$('#u-senha').value='';
+  if($('#u-nome')) $('#u-nome').value='';
+  if($('#u-login')) $('#u-login').value='';
+  if($('#u-senha')) $('#u-senha').value='';
   if($('#u-pode-excluir')) $('#u-pode-excluir').checked=false;
+  if($('#u-pode-gerenciar')) $('#u-pode-gerenciar').checked=false;
   carregarListaUsuarios();
  }catch(e){
   toast('Erro ao conectar ao servidor.');
+ }finally{
+  cadUserBusy=false;
+  if(btn){btn.disabled=false;btn.innerHTML=ic('plus')+'Cadastrar Usuário';}
  }
 }
 
@@ -1195,7 +1248,37 @@ document.addEventListener('click',async ev=>{
  if(a==='csv-all'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(S.records),'text/csv');return;}
  if(a==='copyexp'){const ta=$('#exp');try{await navigator.clipboard.writeText(ta.value);toast('Copiado.');}catch(e){ta.select();toast('Selecione e copie (Ctrl+C).');}return;}
  if(a==='settings'){
-  sheet('Ajustes','<div class="card pad"><div class="grid"><div class="f full"><label for="s-nome">Nome do operador</label><input id="s-nome" value="'+esc(Auth.user?Auth.user.nome:Cfg.get('nome'))+'" placeholder="Seu nome completo" autocomplete="off"></div></div><p class="hint muted" style="font-size:13px;margin:12px 0 0">O nome vem preenchido em cada registro e é gravado no carimbo das fotos.</p></div>','<div class="row mt"><button class="btn pri" data-act="savesettings">Salvar</button></div>');return;}
+  sheet('Ajustes',
+   '<div class="card pad"><div class="grid"><div class="f full"><label for="s-nome">Nome do operador</label><input id="s-nome" value="'+esc(Auth.user?Auth.user.nome:Cfg.get('nome'))+'" placeholder="Seu nome completo" autocomplete="off"></div></div><p class="hint muted" style="font-size:13px;margin:12px 0 0">O nome vem preenchido em cada registro e é gravado no carimbo das fotos.</p><div class="row mt"><button class="btn pri" data-act="savesettings">Salvar Nome</button></div></div>'+
+   '<div class="card pad mt"><h4 style="margin:0 0 12px;font-size:16px;font-weight:700">Alterar Minha Senha</h4>'+
+   '<div class="grid">'+
+   '<div class="f full"><label for="s-pwd-nova">Nova Senha</label><input id="s-pwd-nova" type="password" placeholder="Mínimo 4 caracteres" autocomplete="new-password"></div>'+
+   '<div class="f full"><label for="s-pwd-conf">Confirmar Nova Senha</label><input id="s-pwd-conf" type="password" placeholder="Digite a nova senha novamente" autocomplete="new-password"></div>'+
+   '</div><div class="row mt"><button class="btn sec" data-act="alterarminhasenha">Salvar Nova Senha</button></div></div>'
+  );
+  return;
+ }
+ if(a==='alterarminhasenha'){
+  const n=$('#s-pwd-nova').value;
+  const c=$('#s-pwd-conf').value;
+  if(!n||n.length<4){toast('A nova senha deve ter no mínimo 4 caracteres.');return;}
+  if(n!==c){toast('As senhas digitadas não conferem.');return;}
+  try{
+   const res=await fetch('/api/auth/mudar-senha',{
+    method:'POST',
+    headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
+    body:JSON.stringify({nova_senha:n})
+   });
+   const data=await res.json();
+   if(res.ok&&data.ok){
+    closeLayer();
+    toast('Sua senha foi alterada com sucesso!');
+   }else{
+    toast(data.erro||'Erro ao alterar senha.');
+   }
+  }catch(e){toast('Erro de conexão ao alterar senha.');}
+  return;
+ }
  if(a==='savesettings'){
   const n=$('#s-nome').value.trim();
   Cfg.set('nome',n);
@@ -1208,16 +1291,36 @@ document.addEventListener('click',async ev=>{
    fetch('/api/auth/logout',{method:'POST',headers:{'authorization':'Bearer '+Auth.token}}).catch(()=>{});
    Auth.clear();
    S.records=[];
-   resetForm();
+   S.tab='novo';
+   S.op=null;
    S.done=null;
+   resetForm();
    render();
+   window.scrollTo(0,0);
    toast('Você saiu do sistema.');
   }
   return;
  }
- if(a==='domudarsenha'){doMudarSenha();return;}
- if(a==='dologin'){doLogin();return;}
- if(a==='docaduser'){cadastrarUsuario();return;}
+ if(a==='resetpwd'){
+  const id=t.dataset.id,nome=t.dataset.nome;
+  if(await confirmBox('Resetar a senha de "'+nome+'"? A senha provisória será "1234" e o usuário deverá cadastrar uma nova senha pessoal no próximo acesso.','Resetar Senha')){
+   try{
+    const res=await fetch('/api/usuarios/'+id+'/reset-senha',{
+     method:'POST',
+     headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
+     body:JSON.stringify({nova_senha:'1234'})
+    });
+    const data=await res.json();
+    if(res.ok&&data.ok){
+     toast(data.mensagem||'Senha resetada com sucesso para 1234.');
+     carregarListaUsuarios();
+    }else{
+     toast(data.erro||'Erro ao resetar senha.');
+    }
+   }catch(e){toast('Erro de conexão ao resetar senha.');}
+  }
+  return;
+ }
  if(a==='toggleperm'){
   const id=t.dataset.id;
   const pode_excluir=t.dataset.pode==='1';
@@ -1230,6 +1333,25 @@ document.addEventListener('click',async ev=>{
    const data=await res.json();
    if(res.ok&&data.ok){
     toast('Permissão atualizada!');
+    carregarListaUsuarios();
+   }else{
+    toast(data.erro||'Erro ao alterar permissão.');
+   }
+  }catch(e){toast('Erro de conexão.');}
+  return;
+ }
+ if(a==='togglemanage'){
+  const id=t.dataset.id;
+  const pode_gerenciar_usuarios=t.dataset.pode==='1';
+  try{
+   const res=await fetch('/api/usuarios/'+id+'/permissao',{
+    method:'POST',
+    headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
+    body:JSON.stringify({pode_gerenciar_usuarios})
+   });
+   const data=await res.json();
+   if(res.ok&&data.ok){
+    toast('Permissão de gestão atualizada!');
     carregarListaUsuarios();
    }else{
     toast(data.erro||'Erro ao alterar permissão.');

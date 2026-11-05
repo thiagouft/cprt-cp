@@ -82,7 +82,8 @@ async function initDb() {
 
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS trocar_senha BOOLEAN DEFAULT FALSE;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_excluir BOOLEAN DEFAULT FALSE;
-      UPDATE usuarios SET pode_excluir = TRUE WHERE login = 'admin' OR role = 'admin';
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_gerenciar_usuarios BOOLEAN DEFAULT FALSE;
+      UPDATE usuarios SET pode_excluir = TRUE, pode_gerenciar_usuarios = TRUE WHERE login = 'admin' OR role = 'admin';
 
       CREATE TABLE IF NOT EXISTS sessoes (
         token VARCHAR(128) PRIMARY KEY,
@@ -132,7 +133,7 @@ async function getAuthUser(req) {
 
   try {
     const r = await pool.query(
-      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir 
+      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir, u.pode_gerenciar_usuarios 
        FROM sessoes s 
        JOIN usuarios u ON u.id = s.usuario_id 
        WHERE s.token = $1 AND s.expires_at > NOW()`,
@@ -253,11 +254,12 @@ async function authLogin(req, res) {
     );
 
     const podeExcluir = !!usuario.pode_excluir || usuario.role === 'admin' || usuario.login === 'admin';
+    const podeGerenciar = !!usuario.pode_gerenciar_usuarios || usuario.role === 'admin' || usuario.login === 'admin';
     return json(res, 200, {
       ok: true,
       token,
       trocar_senha: !!usuario.trocar_senha,
-      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir }
+      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir, pode_gerenciar_usuarios: podeGerenciar }
     });
   } catch (e) {
     console.error('Erro no login:', e);
@@ -299,13 +301,29 @@ async function authLogout(req, res) {
 
 async function authMe(req, res, user) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
-  return json(res, 200, { ok: true, usuario: user });
+  const podeExcluir = !!user.pode_excluir || user.role === 'admin' || user.login === 'admin';
+  const podeGerenciar = !!user.pode_gerenciar_usuarios || user.role === 'admin' || user.login === 'admin';
+  return json(res, 200, {
+    ok: true,
+    usuario: {
+      id: user.id,
+      nome: user.nome,
+      login: user.login,
+      role: user.role,
+      trocar_senha: !!user.trocar_senha,
+      pode_excluir: podeExcluir,
+      pode_gerenciar_usuarios: podeGerenciar
+    }
+  });
 }
 
 async function listarUsuarios(req, res, user) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (user.role !== 'admin' && user.login !== 'admin' && !user.pode_gerenciar_usuarios) {
+    return json(res, 403, { erro: 'Sem permissão para gerenciar usuários.' });
+  }
   try {
-    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, created_at FROM usuarios ORDER BY id ASC');
+    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, created_at FROM usuarios ORDER BY id ASC');
     return json(res, 200, { ok: true, usuarios: r.rows });
   } catch (e) {
     return json(res, 500, { erro: 'Erro ao buscar usuários.' });
@@ -314,6 +332,9 @@ async function listarUsuarios(req, res, user) {
 
 async function criarUsuario(req, res, user) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (user.role !== 'admin' && user.login !== 'admin' && !user.pode_gerenciar_usuarios) {
+    return json(res, 403, { erro: 'Apenas administradores podem cadastrar novos usuários.' });
+  }
   let body;
   try { body = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
 
@@ -322,6 +343,7 @@ async function criarUsuario(req, res, user) {
   const senha = String(body.senha || '');
   const role = body.role === 'admin' ? 'admin' : 'user';
   const podeExcluir = !!body.pode_excluir;
+  const podeGerenciar = !!body.pode_gerenciar_usuarios;
 
   if (!nome || !login || !senha) {
     return json(res, 400, { erro: 'Preencha Nome, Login e Senha.' });
@@ -335,8 +357,8 @@ async function criarUsuario(req, res, user) {
 
     const { hash, salt } = hashSenha(senha);
     const r = await pool.query(
-      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir) VALUES ($1, $2, $3, $4, $5, TRUE, $6) RETURNING id, nome, login, role, trocar_senha, pode_excluir, created_at',
-      [nome, login, hash, salt, role, podeExcluir]
+      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7) RETURNING id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, created_at',
+      [nome, login, hash, salt, role, podeExcluir, podeGerenciar]
     );
 
     return json(res, 201, { ok: true, usuario: r.rows[0] });
@@ -348,23 +370,84 @@ async function criarUsuario(req, res, user) {
 
 async function atualizarPermissaoUsuario(req, res, user, id) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
-  if (user.role !== 'admin' && user.login !== 'admin') {
+  if (user.role !== 'admin' && user.login !== 'admin' && !user.pode_gerenciar_usuarios) {
     return json(res, 403, { erro: 'Apenas administradores podem alterar permissões.' });
   }
   let body;
   try { body = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
-  const podeExcluir = !!body.pode_excluir;
 
   try {
-    await pool.query('UPDATE usuarios SET pode_excluir = $1 WHERE id = $2', [podeExcluir, id]);
-    return json(res, 200, { ok: true, pode_excluir: podeExcluir });
+    const target = await pool.query('SELECT login FROM usuarios WHERE id = $1', [id]);
+    if (target.rows.length === 0) return json(res, 404, { erro: 'Usuário não encontrado.' });
+    if (target.rows[0].login === 'admin') {
+      return json(res, 400, { erro: 'As permissões do administrador principal não podem ser alteradas.' });
+    }
+
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (body.pode_excluir !== undefined) {
+      updates.push(`pode_excluir = $${idx++}`);
+      values.push(!!body.pode_excluir);
+    }
+    if (body.pode_gerenciar_usuarios !== undefined) {
+      updates.push(`pode_gerenciar_usuarios = $${idx++}`);
+      values.push(!!body.pode_gerenciar_usuarios);
+    }
+
+    if (updates.length === 0) return json(res, 400, { erro: 'Nenhuma permissão informada.' });
+
+    values.push(id);
+    await pool.query(`UPDATE usuarios SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+
+    return json(res, 200, { ok: true });
   } catch (e) {
     return json(res, 500, { erro: 'Erro ao atualizar permissão.' });
   }
 }
 
+async function resetSenhaUsuario(req, res, user, id) {
+  if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (user.role !== 'admin' && user.login !== 'admin' && !user.pode_gerenciar_usuarios) {
+    return json(res, 403, { erro: 'Sem permissão para resetar senhas.' });
+  }
+  let body = {};
+  try { body = JSON.parse(await lerCorpo(req)); } catch (e) {}
+  const novaSenha = String(body.nova_senha || '1234').trim();
+
+  if (novaSenha.length < 4) {
+    return json(res, 400, { erro: 'A senha provisória deve ter no mínimo 4 caracteres.' });
+  }
+
+  try {
+    const target = await pool.query('SELECT login, nome FROM usuarios WHERE id = $1', [id]);
+    if (target.rows.length === 0) return json(res, 404, { erro: 'Usuário não encontrado.' });
+
+    const { hash, salt } = hashSenha(novaSenha);
+    await pool.query(
+      'UPDATE usuarios SET senha_hash = $1, salt = $2, trocar_senha = TRUE WHERE id = $3',
+      [hash, salt, id]
+    );
+
+    // Invalida sessões ativas do usuário resetado para forçar novo login com a nova senha
+    await pool.query('DELETE FROM sessoes WHERE usuario_id = $1', [id]);
+
+    return json(res, 200, {
+      ok: true,
+      mensagem: `Senha de ${target.rows[0].nome} (${target.rows[0].login}) resetada para "${novaSenha}". O usuário deverá trocá-la no próximo acesso.`
+    });
+  } catch (e) {
+    console.error('Erro ao resetar senha:', e);
+    return json(res, 500, { erro: 'Erro interno ao resetar senha.' });
+  }
+}
+
 async function excluirUsuario(req, res, user, id) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (user.role !== 'admin' && user.login !== 'admin' && !user.pode_gerenciar_usuarios) {
+    return json(res, 403, { erro: 'Apenas administradores podem excluir usuários.' });
+  }
   if (user.id === Number(id)) return json(res, 400, { erro: 'Você não pode excluir o seu próprio usuário.' });
 
   try {
@@ -383,8 +466,15 @@ async function excluirUsuario(req, res, user, id) {
 async function listarRegistros(req, res, user) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
   try {
-    // Não carrega a coluna 'photos' na listagem para poupar dezenas de megabytes de RAM no cliente
-    const r = await pool.query('SELECT id, protocolo, op, at, controlador, patio, prod, dados, (photos IS NOT NULL AND photos != \'{}\'::jsonb) AS has_photos FROM registros ORDER BY at DESC LIMIT 1000');
+    // Retorna dados essenciais e a miniatura (thumb) da etiqueta para preencher o quadrado da lista
+    const r = await pool.query(`
+      SELECT 
+        id, protocolo, op, at, controlador, patio, prod, dados, 
+        (photos IS NOT NULL AND photos != '{}'::jsonb) AS has_photos,
+        COALESCE(dados->>'thumb', photos->'etiqueta'->>'thumb', photos->'etiqueta'->>'data') AS thumb
+      FROM registros 
+      ORDER BY at DESC LIMIT 1000
+    `);
     const registros = r.rows.map(row => {
       const rec = Object.assign({}, row.dados, {
         id: row.id,
@@ -394,7 +484,8 @@ async function listarRegistros(req, res, user) {
         controlador: row.controlador,
         patio: row.patio,
         prod: row.prod,
-        has_photos: row.has_photos
+        has_photos: row.has_photos,
+        thumb: row.thumb || (row.dados && row.dados.thumb) || null
       });
       return rec;
     });
@@ -505,6 +596,10 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/usuarios/') && p.endsWith('/permissao') && req.method === 'POST') {
     const id = p.split('/')[3];
     return atualizarPermissaoUsuario(req, res, user, id);
+  }
+  if (p.startsWith('/api/usuarios/') && p.endsWith('/reset-senha') && req.method === 'POST') {
+    const id = p.split('/')[3];
+    return resetSenhaUsuario(req, res, user, id);
   }
   if (p.startsWith('/api/usuarios/') && req.method === 'DELETE') {
     const id = p.split('/')[3];
