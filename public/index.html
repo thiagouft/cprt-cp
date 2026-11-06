@@ -316,7 +316,7 @@ const PH={etiqueta:{t:'Etiqueta do material',i:'tag',h:'Aço pronto, barra reta 
           placa:{t:'Placa do caminhão',i:'truck',h:'Fotografe a placa traseira ou dianteira, sem reflexo de farol.'},
           cracha:{t:'Crachá do motorista',i:'id',h:'Foto do crachá com nome e empresa legíveis, ao lado do veículo.'},
           notafiscal:{t:'Foto da Nota Fiscal',i:'doc',h:'Fotografe a Nota Fiscal física que acompanha a carga. Opcional.',opcional:true}};
-function opShots(op){return op==='ret'?['etiqueta','placa','cracha','notafiscal']:['etiqueta','placa','cracha'];}
+function opShots(op){return op==='mob'?['etiqueta','placa','cracha','notafiscal']:['etiqueta','placa','cracha'];}
 
 /* ============ armazenamento IndexedDB ============ */
 const DB={ok:false,db:null,mem:[],
@@ -796,7 +796,7 @@ function vOps(){
  '<div class="ops">'+
  ['ret','mob'].map(k=>'<button class="op '+k+'" data-act="op" data-op="'+k+'"><span class="ico">'+ic(k==='ret'?'out':'mob')+'</span><span class="tt">'+OPS[k].label+'</span><span class="dd">'+OPS[k].desc+'</span></button>').join('')+
  '</div>'+
- '<div class="note mt">Cada registro exige fotos feitas no momento (etiqueta, placa e crachá). Na Retirada, você também pode anexar a foto da Nota Fiscal como opcional.'+(today?' Hoje já foram feitos <b>'+today+'</b> registros.':'')+'</div>';
+ '<div class="note mt">Cada registro exige fotos feitas no momento (etiqueta, placa e crachá). Na Entrada, você também pode anexar a foto da Nota Fiscal como opcional.'+(today?' Hoje já foram feitos <b>'+today+'</b> registros.':'')+'</div>';
 }
 
 function tileHtml(k){
@@ -819,7 +819,7 @@ function photosBlock(){
  const reqShots=['etiqueta','placa','cracha'];
  const nReq=reqShots.filter(k=>S.photos[k]).length;
  const totalReq=reqShots.length;
- const hasNf=S.op==='ret'&&!!S.photos.notafiscal;
+ const hasNf=S.op==='mob'&&!!S.photos.notafiscal;
  const progText=nReq+' de '+totalReq+' fotos obrigatórias'+(hasNf?' · Nota Fiscal anexada':'');
  return '<div class="prog"><span>'+progText+'</span><div class="bar"><i style="width:'+(nReq/totalReq*100)+'%"></i></div></div><div class="tiles">'+shots.map(tileHtml).join('')+'</div>';
 }
