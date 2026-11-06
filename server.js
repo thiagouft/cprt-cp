@@ -462,6 +462,38 @@ async function excluirUsuario(req, res, user, id) {
   }
 }
 
+async function atualizarNomeUsuario(req, res, user, id) {
+  if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  // Regra de segurança: Apenas o master (login === 'admin') pode alterar nomes de usuário
+  if (user.login !== 'admin') {
+    return json(res, 403, { erro: 'Apenas o administrador master pode alterar o nome do usuário.' });
+  }
+
+  let body;
+  try { body = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
+
+  const novoNome = String(body.nome || '').trim();
+  if (!novoNome || novoNome.length < 2) {
+    return json(res, 400, { erro: 'O nome deve ter no mínimo 2 caracteres.' });
+  }
+
+  try {
+    const target = await pool.query('SELECT id, login, nome FROM usuarios WHERE id = $1', [id]);
+    if (target.rows.length === 0) return json(res, 404, { erro: 'Usuário não encontrado.' });
+
+    await pool.query('UPDATE usuarios SET nome = $1 WHERE id = $2', [novoNome, id]);
+
+    return json(res, 200, {
+      ok: true,
+      mensagem: `Nome alterado para "${novoNome}" com sucesso!`,
+      usuario: { id: Number(id), nome: novoNome }
+    });
+  } catch (e) {
+    console.error('Erro ao atualizar nome:', e);
+    return json(res, 500, { erro: 'Erro interno ao atualizar nome do usuário.' });
+  }
+}
+
 // Handlers de Registros no PostgreSQL
 async function listarRegistros(req, res, user) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
@@ -600,6 +632,10 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/usuarios/') && p.endsWith('/reset-senha') && req.method === 'POST') {
     const id = p.split('/')[3];
     return resetSenhaUsuario(req, res, user, id);
+  }
+  if (p.startsWith('/api/usuarios/') && p.endsWith('/nome') && req.method === 'POST') {
+    const id = p.split('/')[3];
+    return atualizarNomeUsuario(req, res, user, id);
   }
   if (p.startsWith('/api/usuarios/') && req.method === 'DELETE') {
     const id = p.split('/')[3];

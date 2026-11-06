@@ -49,6 +49,9 @@ svg.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;strok
 .app{min-height:100%;display:flex;flex-direction:column}
 header.top{background:var(--hdr);color:var(--hdr-ink);padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;position:sticky;top:0;z-index:20;border-bottom:3px solid var(--accent)}
 .top-in{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.top-in.is-login{justify-content:center}
+.top-in.is-login .grow{flex:0 1 auto}
+.top-in.is-login .sub{display:none}
 .mark{width:40px;height:40px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--font-d);font-weight:700;font-size:20px;letter-spacing:.02em;flex:none}
 .top h1{margin:0;font-family:var(--font-d);font-weight:700;font-size:22px;letter-spacing:.04em;text-transform:uppercase;line-height:1.05}
 .top .sub{font-size:12.5px;opacity:.72;margin-top:2px}
@@ -206,11 +209,11 @@ textarea.exp{width:100%;min-height:180px;font-family:ui-monospace,Menlo,Consolas
 <body>
 <div class="app">
   <header class="top">
-    <div class="top-in">
+    <div class="top-in is-login" id="top-in">
       <div class="mark" aria-hidden="true">CP</div>
       <div class="grow">
         <h1>Controle de Aço</h1>
-        <div class="sub" id="subline">Pátios Marabá e São Félix</div>
+        <div class="sub" id="subline" style="display:none"></div>
       </div>
       <div id="top-actions" style="display:none;align-items:center;gap:8px">
         <span id="user-display" class="user-badge" style="display:none"></span>
@@ -444,20 +447,24 @@ function validate(){
 const view=$('#view');
 
 function renderTabs(){
+ const topIn=$('#top-in')||$('.top-in');
  if(!Auth.user || Auth.user.trocar_senha){
   $('#tabs').innerHTML='';
   $('nav.tabs').style.display='none';
   if(Auth.user && Auth.user.trocar_senha){
+   if(topIn) topIn.classList.remove('is-login');
    $('#top-actions').style.display='flex';
    $('#user-display').style.display='inline-flex';
    $('#user-display').textContent=Auth.user.nome.split(' ')[0];
    $('#btn-settings').style.display='none';
    $('#btn-logout').innerHTML=ic('logout');
   }else{
+   if(topIn) topIn.classList.add('is-login');
    $('#top-actions').style.display='none';
   }
   return;
  }
+ if(topIn) topIn.classList.remove('is-login');
  $('nav.tabs').style.display='block';
  $('#top-actions').style.display='flex';
  $('#btn-settings').style.display='inline-grid';
@@ -476,6 +483,7 @@ function renderTabs(){
 
 function render(){
  renderTabs();
+ updateSub();
  if(!Auth.user){
   view.innerHTML=vLogin();
   return;
@@ -597,21 +605,21 @@ async function doMudarSenha(){
 
 function vUsuarios(){
  return '<h2 class="sec" style="margin-top:6px"><span class="n">'+ic('users')+'</span>Gestão de Usuários</h2>'+
- '<div class="card pad" style="margin-bottom:20px">'+
- '<h3 style="margin:0 0 14px;font-size:17px;font-weight:700">Cadastrar Novo Usuário</h3>'+
+ '<div class="card pad" style="margin-bottom:20px" id="box-cad-user">'+
+ '<h3 style="margin:0 0 14px;font-size:17px;font-weight:700" id="cad-user-title">Cadastrar Novo Usuário</h3>'+
  '<form id="form-cad-user">'+
  '<div class="grid">'+
  '<div class="f full"><label for="u-nome">Nome Completo</label><input id="u-nome" placeholder="Ex: Carlos Silva" required></div>'+
- '<div class="f half"><label for="u-login">Login</label><input id="u-login" placeholder="Ex: carlos.silva" required autocomplete="off"></div>'+
- '<div class="f half"><label for="u-senha">Senha Provisória</label><input id="u-senha" type="password" placeholder="Mínimo 4 caracteres" required autocomplete="new-password"></div>'+
- '<div class="f full" style="margin-top:6px">'+
+ '<div class="f half" id="wrap-u-login"><label for="u-login">Login</label><input id="u-login" placeholder="Ex: carlos.silva" required autocomplete="off"></div>'+
+ '<div class="f half" id="wrap-u-senha"><label for="u-senha">Senha Provisória</label><input id="u-senha" type="password" placeholder="Mínimo 4 caracteres" required autocomplete="new-password"></div>'+
+ '<div class="f full" id="wrap-u-excluir" style="margin-top:6px">'+
  '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">'+
  '<input type="checkbox" id="u-pode-excluir" style="width:20px;height:20px;cursor:pointer">'+
  '<span>Permitir que este usuário exclua registros salvos</span>'+
  '</label>'+
  '<div class="hint">Se desmarcado, o operador poderá registrar e visualizar, mas não poderá excluir nada.</div>'+
  '</div>'+
- '<div class="f full" style="margin-top:6px">'+
+ '<div class="f full" id="wrap-u-gerenciar" style="margin-top:6px">'+
  '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">'+
  '<input type="checkbox" id="u-pode-gerenciar" style="width:20px;height:20px;cursor:pointer">'+
  '<span>Permitir gerenciar usuários (acessar esta tela, cadastrar e resetar senhas)</span>'+
@@ -619,7 +627,9 @@ function vUsuarios(){
  '<div class="hint">Se marcado, o usuário terá permissão administrativa para criar outros operadores e resetar senhas.</div>'+
  '</div>'+
  '</div>'+
- '<div class="row mt"><button type="submit" class="btn pri block" id="btn-cad-user" style="font-weight:700">'+ic('plus')+'Cadastrar Usuário</button></div>'+
+ '<div class="row mt" id="cad-user-actions">'+
+ '<button type="submit" class="btn pri block" id="btn-cad-user" style="font-weight:700">'+ic('plus')+'Cadastrar Usuário</button>'+
+ '</div>'+
  '</form>'+
  '</div>'+
  '<h3 style="margin:24px 0 10px;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Usuários Cadastrados</h3>'+
@@ -677,6 +687,7 @@ async function carregarListaUsuarios(){
   c.innerHTML=data.usuarios.map(u=>{
    const isEu=Auth.user&&Auth.user.id===u.id;
    const isMaster=u.login==='admin';
+   const isLogadoMaster=Auth.user&&Auth.user.login==='admin';
    const isAdmin=u.role==='admin'||isMaster;
    const podeExcluir=!!u.pode_excluir||isAdmin;
    const podeGerenciar=!!u.pode_gerenciar_usuarios||isAdmin;
@@ -701,6 +712,7 @@ async function carregarListaUsuarios(){
     (u.trocar_senha?' · <span style="color:var(--bad);font-weight:600">Aguardando troca de senha</span>':'')+
     '</div></div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    (isLogadoMaster?'<button class="btn sm" data-act="editnome" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Alterar Nome</button><button class="btn sm" data-act="cadeditar" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Editar no Cadastro</button>':'')+
     '<button class="btn sm" data-act="resetpwd" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">Resetar Senha</button>'+
     (!isMaster?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar Exclusão':'Permitir Exclusão')+'</button>':'')+
     (!isMaster?'<button class="btn sm" data-act="togglemanage" data-id="'+u.id+'" data-pode="'+(u.pode_gerenciar_usuarios?0:1)+'">'+(u.pode_gerenciar_usuarios?'Revogar Gestão':'Permitir Gestão')+'</button>':'')+
@@ -1247,14 +1259,52 @@ document.addEventListener('click',async ev=>{
  if(a==='csv'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(filtered()),'text/csv');return;}
  if(a==='csv-all'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(S.records),'text/csv');return;}
  if(a==='copyexp'){const ta=$('#exp');try{await navigator.clipboard.writeText(ta.value);toast('Copiado.');}catch(e){ta.select();toast('Selecione e copie (Ctrl+C).');}return;}
+ async function salvarNomeUsuario(id, novoNome, btnEl){
+  if(!novoNome || novoNome.length < 2){
+   toast('Digite um nome válido (mínimo 2 caracteres).');
+   return false;
+  }
+  if(btnEl){ btnEl.disabled = true; btnEl.textContent = 'Salvando...'; }
+  try{
+   const res = await fetch('/api/usuarios/' + id + '/nome', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + Auth.token },
+    body: JSON.stringify({ nome: novoNome })
+   });
+   const data = await res.json();
+   if(res.ok && data.ok){
+    toast('Nome atualizado com sucesso!');
+    if(Auth.user && Auth.user.id == id){
+     Auth.user.nome = novoNome;
+     Auth.set(Auth.token, Auth.user);
+     Cfg.set('nome', novoNome);
+     if(S.form) S.form.controlador = novoNome;
+     const ud = $('#user-display');
+     if(ud) ud.textContent = novoNome.split(' ')[0];
+    }
+    closeLayer();
+    carregarListaUsuarios();
+    return true;
+   }else{
+    toast(data.erro || 'Erro ao alterar nome.');
+    return false;
+   }
+  }catch(e){
+   toast('Erro de conexão ao salvar nome.');
+   return false;
+  }finally{
+   if(btnEl){ btnEl.disabled = false; btnEl.textContent = 'Salvar Nome'; }
+  }
+ }
+
  if(a==='settings'){
   sheet('Ajustes',
-   '<div class="card pad"><div class="grid"><div class="f full"><label for="s-nome">Nome do operador</label><input id="s-nome" value="'+esc(Auth.user?Auth.user.nome:Cfg.get('nome'))+'" placeholder="Seu nome completo" autocomplete="off"></div></div><p class="hint muted" style="font-size:13px;margin:12px 0 0">O nome vem preenchido em cada registro e é gravado no carimbo das fotos.</p><div class="row mt"><button class="btn pri" data-act="savesettings">Salvar Nome</button></div></div>'+
-   '<div class="card pad mt"><h4 style="margin:0 0 12px;font-size:16px;font-weight:700">Alterar Minha Senha</h4>'+
+   '<div class="card pad">'+
+   '<h4 style="margin:0 0 12px;font-size:16px;font-weight:700">Alterar Minha Senha</h4>'+
    '<div class="grid">'+
    '<div class="f full"><label for="s-pwd-nova">Nova Senha</label><input id="s-pwd-nova" type="password" placeholder="Mínimo 4 caracteres" autocomplete="new-password"></div>'+
    '<div class="f full"><label for="s-pwd-conf">Confirmar Nova Senha</label><input id="s-pwd-conf" type="password" placeholder="Digite a nova senha novamente" autocomplete="new-password"></div>'+
-   '</div><div class="row mt"><button class="btn sec" data-act="alterarminhasenha">Salvar Nova Senha</button></div></div>'
+   '</div><div class="row mt"><button class="btn pri block" data-act="alterarminhasenha" style="font-weight:700">Salvar Nova Senha</button></div></div>'
   );
   return;
  }
@@ -1279,12 +1329,64 @@ document.addEventListener('click',async ev=>{
   }catch(e){toast('Erro de conexão ao alterar senha.');}
   return;
  }
- if(a==='savesettings'){
-  const n=$('#s-nome').value.trim();
-  Cfg.set('nome',n);
-  if(Auth.user){Auth.user.nome=n;Auth.set(Auth.token,Auth.user);}
-  if(!S.form.controlador)S.form.controlador=n;
-  closeLayer();render();toast('Ajustes salvos.');return;
+ if(a==='editnome'){
+  const isMaster = Auth.user && Auth.user.login === 'admin';
+  if(!isMaster){ toast('Apenas o administrador master pode alterar nomes.'); return; }
+  const id = t.dataset.id, nomeAtual = t.dataset.nome, loginAtual = t.dataset.login;
+  sheet('Alterar Nome do Usuário',
+   '<div class="card pad">'+
+   '<div style="margin-bottom:14px;font-size:14px;color:var(--muted)">'+
+   'Usuário: <b style="color:var(--ink)">@' + esc(loginAtual) + '</b>' + (id == Auth.user.id ? ' <span class="pill" style="background:#0e1a2b;color:#f2a900;font-size:11px;font-weight:700">MASTER (VOCÊ)</span>' : '') +
+   '</div>'+
+   '<div class="f full">'+
+   '<label for="m-edit-nome">Nome Completo</label>'+
+   '<input id="m-edit-nome" value="' + esc(nomeAtual) + '" placeholder="Digite o novo nome completo" autocomplete="off" autofocus>'+
+   '</div>'+
+   '<p class="hint muted" style="font-size:12.5px;margin:10px 0 0">O nome atualizado será gravado nos novos registros e no carimbo das fotos.</p>'+
+   '<div class="row mt">'+
+   '<button class="btn pri block" id="btn-save-modal-nome" data-act="doeditnome" data-id="' + id + '" style="font-weight:700">Salvar Nome</button>'+
+   '</div>'+
+   '</div>'
+  );
+  return;
+ }
+ if(a==='doeditnome'){
+  const id = t.dataset.id;
+  const inp = $('#m-edit-nome');
+  if(!inp) return;
+  await salvarNomeUsuario(id, inp.value.trim(), t);
+  return;
+ }
+ if(a==='cadeditar'){
+  const isMaster = Auth.user && Auth.user.login === 'admin';
+  if(!isMaster){ toast('Apenas o administrador master pode alterar nomes.'); return; }
+  const id = t.dataset.id, nomeAtual = t.dataset.nome, loginAtual = t.dataset.login;
+  const box = $('#box-cad-user');
+  if(!box) return;
+  $('#cad-user-title').innerHTML = 'Editar Cadastro: <span style="color:var(--primary)">@' + esc(loginAtual) + '</span>' + (id == Auth.user.id ? ' <span class="pill" style="background:#0e1a2b;color:#f2a900;font-size:11px;font-weight:700">MASTER (VOCÊ)</span>' : '');
+  $('#u-nome').value = nomeAtual;
+  if($('#wrap-u-login')) $('#wrap-u-login').style.display = 'none';
+  if($('#wrap-u-senha')) $('#wrap-u-senha').style.display = 'none';
+  if($('#wrap-u-excluir')) $('#wrap-u-excluir').style.display = 'none';
+  if($('#wrap-u-gerenciar')) $('#wrap-u-gerenciar').style.display = 'none';
+  $('#cad-user-actions').innerHTML = 
+   '<button type="button" class="btn pri" id="btn-salvar-edicao" data-act="dosaveditar" data-id="' + id + '" style="font-weight:700">Salvar Alteração de Nome</button>'+
+   '<button type="button" class="btn sec" data-act="cancelareditar" style="font-weight:600">Cancelar</button>';
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('#u-nome').focus();
+  return;
+ }
+ if(a==='dosaveditar'){
+  const id = t.dataset.id;
+  const inp = $('#u-nome');
+  if(!inp) return;
+  const ok = await salvarNomeUsuario(id, inp.value.trim(), t);
+  if(ok) render();
+  return;
+ }
+ if(a==='cancelareditar'){
+  render();
+  return;
  }
  if(a==='logout'){
   if(await confirmBox('Deseja realmente sair da sua conta?','Sair')){
@@ -1399,7 +1501,18 @@ document.addEventListener('input',ev=>{
  if(['comp','qtd','bitola','pliq','metragem','compm'].indexOf(k)>-1){const w=$('#calcwrap');if(w)w.innerHTML=calcHtml();}
 });
 
-function updateSub(){const d=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});$('#subline').textContent='Pátio '+(S.patio||'não definido')+' · '+d;}
+function updateSub(){
+ const el=$('#subline');
+ if(!el)return;
+ if(!Auth.user){
+  el.style.display='none';
+  el.textContent='';
+  return;
+ }
+ el.style.display='block';
+ const d=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+ el.textContent='Pátio '+(S.patio||'não definido')+' · '+d;
+}
 
 async function sincronizarUsuarioLogado(){
  if(!Auth.token) return;
