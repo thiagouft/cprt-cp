@@ -314,7 +314,7 @@ const CODIGOS=['CPT','CTP','CPM','DF'];
 const CODIGOS_RE=new RegExp('^('+CODIGOS.join('|')+')[A-Z0-9]{1,9}$');
 const PH={etiqueta:{t:'Etiqueta do material',i:'tag',h:'Aço pronto, barra reta ou cordoalha: o app identifica sozinho. Enquadre a etiqueta inteira, com todos os campos legíveis.'},
           placa:{t:'Placa do caminhão',i:'truck',h:'Fotografe a placa traseira ou dianteira, sem reflexo de farol.'},
-          cracha:{t:'Crachá do motorista',i:'id',h:'Foto do crachá com nome e empresa legíveis, ao lado do veículo.'},
+          cracha:{t:'Crachá, CNH ou RG do motorista',i:'id',h:'Foto do crachá da empresa, CNH ou RG com nome legível.'},
           notafiscal:{t:'Foto da Nota Fiscal',i:'doc',h:'Fotografe a Nota Fiscal física que acompanha a carga. Opcional.',opcional:true}};
 function opShots(op){return op==='mob'?['etiqueta','placa','cracha','notafiscal']:['etiqueta','placa','cracha'];}
 
@@ -388,7 +388,7 @@ async function processPhoto(file,key){
  x.fillStyle='#F2A900';
  x.font='700 '+fs+'px Barlow Condensed, Arial, sans-serif';
  const at=new Date();
- const label=({etiqueta:'ETIQUETA DO MATERIAL',placa:'PLACA DO CAMINHÃO',cracha:'CRACHÁ DO MOTORISTA',notafiscal:'NOTA FISCAL'})[key]||'FOTO';
+ const label=({etiqueta:'ETIQUETA DO MATERIAL',placa:'PLACA DO CAMINHÃO',cracha:'DOCUMENTO / CRACHÁ DO MOTORISTA',notafiscal:'NOTA FISCAL'})[key]||'FOTO';
  x.fillText(label+' · '+OPS[S.op||'ret'].label.toUpperCase(),pad,h-ph+Math.round(fs*0.95));
  x.fillStyle='#F2F5F9';
  x.font='500 '+Math.round(fs*.88)+'px Barlow, Arial, sans-serif';
@@ -796,7 +796,7 @@ function vOps(){
  '<div class="ops">'+
  ['ret','mob'].map(k=>'<button class="op '+k+'" data-act="op" data-op="'+k+'"><span class="ico">'+ic(k==='ret'?'out':'mob')+'</span><span class="tt">'+OPS[k].label+'</span><span class="dd">'+OPS[k].desc+'</span></button>').join('')+
  '</div>'+
- '<div class="note mt">Cada registro exige fotos feitas no momento (etiqueta, placa e crachá). Na Entrada, você também pode anexar a foto da Nota Fiscal como opcional.'+(today?' Hoje já foram feitos <b>'+today+'</b> registros.':'')+'</div>';
+ '<div class="note mt">Cada registro exige fotos feitas no momento (etiqueta, placa e crachá/CNH/RG). Na Entrada, você também pode anexar a foto da Nota Fiscal como opcional.'+(today?' Hoje já foram feitos <b>'+today+'</b> registros.':'')+'</div>';
 }
 
 function tileHtml(k){
@@ -906,9 +906,9 @@ function vForm(){
  '<div id="dados">'+dadosHtml()+'</div>'+
  '<h2 class="sec"><span class="n">4</span>Veículo e motorista</h2><div class="card pad"><div class="grid">'+
   fld({k:'placa',l:'Placa do caminhão',req:1,full:1,cls:'plate',ph:'ABC1D23',max:7,cap:1})+
-  fld({k:'motorista',l:'Nome do motorista',req:1,full:1,ph:'Como está no crachá'})+
-  fld({k:'empresa',l:'Empresa / vínculo',ph:'ex.: Transportadora'})+
-  fld({k:'cracha',l:'Nº do crachá',ph:'Se houver'})+
+  fld({k:'motorista',l:'Nome do motorista',req:1,full:1,ph:'Como está no crachá, CNH ou RG'})+
+  fld({k:'empresa',l:'Empresa / transportadora',ph:'Preenchimento manual ou do crachá'})+
+  fld({k:'cracha',l:'Nº do documento / crachá',ph:'Nº CNH, RG ou matrícula'})+
   '</div></div>'+
  '<h2 class="sec"><span class="n">5</span>Destino e responsável</h2><div class="card pad"><div class="grid">'+
   fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP})+
@@ -927,7 +927,7 @@ function recRows(r){
   :barra?[['Marca',r.marca],['Material',r.material],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento da barra',r.comp?nf(r.comp/100,2)+' m':''],['Norma',r.norma],['Corrida',r.corrida],['Feixe',r.feixe],['Lote',r.lote],['Peso líquido',r.kg!=null?nf(r.kg,0)+' kg':''],[r.barrasContadas?'Barras (contadas)':'Barras (estimadas)',r.qtd],['Metros lineares',r.m!=null?nf(r.m,0)+' m':''],['Código de barras',r.cod]]
   :[['OS',r.os],['Código da etiqueta',r.cod],['CPT / CPM / DF',r.cpt],['Desenho / posição',[r.desenho,r.posicao].filter(Boolean).join(' / ')],['Elemento / CJ',[r.elemento,r.cj&&('CJ '+r.cj)].filter(Boolean).join(' · ')],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento × barras',r.comp+' cm × '+r.qtd],['Peso estimado',r.kg!=null?nf(r.kg,1)+' kg ('+nf(r.m,1)+' m)':'']];
  const temNf=!!(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data);
- const tail=[['Placa',r.placa],['Motorista',r.motorista],['Empresa',r.empresa],['Crachá',r.cracha],[o.destL,r.destino],[o.autL,r.autorizador],['Nota Fiscal',temNf?'Anexada ao registro':''],['Observações',r.obs]];
+ const tail=[['Placa',r.placa],['Motorista',r.motorista],['Empresa',r.empresa],['Doc. / Crachá',r.cracha],[o.destL,r.destino],[o.autL,r.autorizador],['Nota Fiscal',temNf?'Anexada ao registro':''],['Observações',r.obs]];
  return head.concat(mid,tail).filter(x=>x[1]);
 }
 function dlHtml(r){return '<dl class="dl">'+recRows(r).map(x=>'<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>').join('')+'</dl>';}
@@ -1029,7 +1029,7 @@ async function openRecord(id){
  const phKeys=['etiqueta','placa','cracha'];
  if(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data) phKeys.push('notafiscal');
  const phHtml=temFotos
-  ? '<div class="photos3">'+phKeys.map(k=>'<figure><img src="'+(r.photos[k]?r.photos[k].data:'')+'" alt="'+esc(PH[k]?PH[k].t:k)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Crachá',notafiscal:'Nota Fiscal'})[k]+'</figcaption></figure>').join('')+'</div>'
+  ? '<div class="photos3">'+phKeys.map(k=>'<figure><img src="'+(r.photos[k]?r.photos[k].data:'')+'" alt="'+esc(PH[k]?PH[k].t:k)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Doc. / Crachá',notafiscal:'Nota Fiscal'})[k]+'</figcaption></figure>').join('')+'</div>'
   : '<div class="note">Fotos detalhadas não disponíveis offline.</div>';
  sheet(r.protocolo,phHtml+'<div class="card pad mt">'+dlHtml(r)+'</div>',
  '<div class="row mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button>'+btnExcluir+'</div>');
@@ -1057,7 +1057,7 @@ function comprovanteHtml(r){
  const ph=phKeys.map(k=>{
   const p=r.photos&&r.photos[k];
   if(!p||!p.data)return '';
-  const cap=({etiqueta:'Etiqueta',placa:'Placa do caminhão',cracha:'Crachá do motorista',notafiscal:'Nota Fiscal'})[k]||'Foto';
+  const cap=({etiqueta:'Etiqueta',placa:'Placa do caminhão',cracha:'Documento / Crachá do motorista',notafiscal:'Nota Fiscal'})[k]||'Foto';
   return '<figure><img src="'+p.data+'"><figcaption>'+cap+(p.at?' · '+fdt(p.at):'')+'</figcaption></figure>';
  }).join('');
  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante '+esc(r.protocolo)+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#0E1A2B;max-width:820px;margin:24px auto;padding:0 16px}header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #F2A900;padding-bottom:10px}h1{font-size:20px;margin:0;text-transform:uppercase;letter-spacing:.04em}.p{font-size:26px;font-weight:700;letter-spacing:.06em}.s{font-size:12px;color:#586577}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}th{width:36%;text-align:left;background:#F3F5F8;padding:7px 10px;border:1px solid #D3D9E1}td{padding:7px 10px;border:1px solid #D3D9E1;font-weight:600}.ph{display:grid;grid-template-columns:repeat('+phKeys.length+',1fr);gap:10px}@media(max-width:600px){.ph{grid-template-columns:1fr 1fr}}figure{margin:0}img{width:100%;border-radius:6px;border:1px solid #D3D9E1}figcaption{font-size:11px;color:#586577;margin-top:4px}.sg{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:56px;font-size:12px;text-align:center}.sg div{border-top:1px solid #0E1A2B;padding-top:6px}</style></head><body><header><div><h1>Comprovante de '+esc(OPS[r.op].label)+' de material</h1><div class="s">CPRT · Pátio '+esc(r.patio||'—')+'</div></div><div class="p">'+esc(r.protocolo)+'</div></header><table>'+rows+'</table><div class="ph">'+ph+'</div><div class="sg"><div>Controlador: '+esc(r.controlador)+'</div><div>Motorista: '+esc(r.motorista)+'</div></div></body></html>';
@@ -1188,7 +1188,13 @@ async function autofill(k,raw){
     const p=d.placa?String(d.placa).toUpperCase().replace(/[^A-Z0-9]/g,''):'';
     if(/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(p)&&setField('placa',p))n++;
    }else{
-    [['motorista',d.motorista],['empresa',d.empresa],['cracha',d.cracha]].forEach(([f,v])=>{if(setField(f,v&&String(v).trim()))n++;});
+    let docNum=d.cracha;
+    if(d.tipo_doc==='rg'||d.registro_geral){
+     docNum=d.registro_geral||d.cracha;
+    }else if(d.tipo_doc==='cnh'||d.num_registro){
+     docNum=d.num_registro||d.cracha;
+    }
+    [['motorista',d.motorista],['empresa',d.empresa],['cracha',docNum]].forEach(([f,v])=>{if(setField(f,v&&String(v).trim()))n++;});
    }
   }
   S.ai[k]=n?'ok':'fail';
