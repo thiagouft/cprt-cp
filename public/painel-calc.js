@@ -405,7 +405,30 @@
     };
   }
 
+  /* ---------- Etiqueta repetida (aviso no lançamento) ----------
+   * Devolve uma chave que identifica a etiqueta física, ou '' quando não há dados suficientes para comparar.
+   * A operação entra na chave: a mesma etiqueta pode entrar e depois sair, mas não entrar duas vezes. */
+  function chaveEtiqueta(r) {
+    var op = str(r.op), prod = str(r.prod || 'aco'), cod = str(r.cod).replace(/[^0-9A-Za-z]/g, '');
+    var kg = Math.round(num(r.kg) * 100) / 100;
+    var k = function (a) { return a.map(function (x) { return str(x).trim().toUpperCase(); }).join('|'); };
+    if (prod === 'barra') {
+      if (cod) return k(['B', op, cod, kg]);
+      if (str(r.corrida).trim() && str(r.feixe).trim() && kg) return k(['B', op, r.corrida, r.feixe, kg]);
+      return '';
+    }
+    if (prod === 'cord') {
+      if (cod) return k(['C', op, cod]);
+      if (str(r.material).trim() && str(r.ordem).trim() && kg) return k(['C', op, r.material, r.ordem, kg]);
+      return '';
+    }
+    if (cod) return k(['A', op, cod]);
+    if (str(r.os).trim() && str(r.desenho).trim() && str(r.posicao).trim()) return k(['A', op, r.os, r.desenho, r.posicao, r.cj, r.bitola, r.comp, r.qtd]);
+    return '';
+  }
+
   return {
+    chaveEtiqueta: chaveEtiqueta,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };

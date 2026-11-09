@@ -120,6 +120,24 @@ const casos = { 'Patio de ferragens lll': 'Pátio de Ferragens III', 'Pátio de 
   'Pátio de ferragens IV,Rua C.': 'Pátio de Ferragens IV, RUA C.', 'Pátio de ferragens IV, Rua C.': 'Pátio de Ferragens IV, RUA C.' };
 Object.keys(casos).forEach(k => eq('rua "' + k + '"', PC.ruaPadrao(k), casos[k]));
 
+/* =============== 2b) Etiqueta repetida =============== */
+secao('Etiqueta repetida — chave de comparação');
+{
+  const K = PC.chaveEtiqueta;
+  const barra = { op: 'mob', prod: 'barra', cod: '27943824542000101837', kg: 1267.43, lote: 'PITL2 1' };
+  check('barra reta: mesmo código e peso = mesma chave', K(barra) === K({ ...barra, controlador: 'Outro', placa: 'XXX0X00' }) && K(barra) !== '');
+  check('barra reta: peso diferente = chave diferente', K(barra) !== K({ ...barra, kg: 1200 }));
+  check('operação diferente = chave diferente (a mesma etiqueta pode sair depois de entrar)', K(barra) !== K({ ...barra, op: 'ret' }));
+  check('barra reta sem código nem corrida/feixe = sem chave (não compara)', K({ op: 'mob', prod: 'barra', kg: 500 }) === '');
+  check('barra reta sem código usa corrida + feixe + peso', K({ op: 'mob', prod: 'barra', corrida: '27602/82', feixe: '017', kg: 900 }) === K({ op: 'mob', prod: 'barra', corrida: '27602/82', feixe: '017', kg: 900.001 }));
+  const aco = { op: 'mob', prod: 'aco', cod: 'MCPT28Y000022', os: '8', desenho: '231-1', posicao: '20' };
+  check('aço pronto: código da etiqueta basta', K(aco) !== '' && K(aco) === K({ ...aco, os: '9' }));
+  const acoSem = { op: 'mob', prod: 'aco', os: '8', desenho: '231-1', posicao: '20', cj: '13', bitola: '16.0', comp: 362, qtd: 50 };
+  check('aço pronto sem código: OS + desenho + posição + CJ + bitola + comprimento + quantidade', K(acoSem) !== '' && K(acoSem) !== K({ ...acoSem, qtd: 51 }) && K(acoSem) === K({ ...acoSem, qtd: '50' }));
+  check('aço pronto sem código e sem desenho = sem chave', K({ op: 'mob', prod: 'aco', os: '8' }) === '');
+  check('cordoalha: código de barras', K({ op: 'mob', prod: 'cord', cod: '1065317351' }) === K({ op: 'mob', prod: 'cord', cod: '1065317351', kg: 1 }));
+}
+
 /* =============== 3) Filtros — conferência independente (força bruta sobre as linhas do Excel) =============== */
 secao('Filtros combinados (conferência independente)');
 const kgIx = ix('Peso (kg)'), opIx = ix('Operação'), prIx = ix('Produto'), paIx = ix('Pátio'), baIx = ix('Barras');

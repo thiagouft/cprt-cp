@@ -53,6 +53,14 @@ python -X utf8 tests/export_dash.py   # gera tests/fixtures/dash-golden.json (fo
 npm test
 ```
 
+## Carga com várias etiquetas
+Uma carreta costuma trazer 10 a 15 etiquetas com a mesma placa, crachá e nota. Depois de salvar a primeira etiqueta, use **"Próxima etiqueta da mesma carga"**: placa, crachá, nota, motorista, empresa, localização e autorizador são reaproveitados e só a foto da etiqueta é pedida. **"Encerrar carga"** mostra o resumo. Vale para entrada e para retirada, e aço pronto e barra reta podem vir na mesma carga.
+
+O lançamento individual continua igual (**"Novo registro"**). Cada etiqueta continua sendo **um registro** (mesmos campos, protocolo e CSV); as etiquetas da mesma carga só ganham os campos opcionais `carga` e `cargaSeq`.
+
+- **Etiqueta repetida:** antes de salvar, o sistema avisa se a mesma etiqueta já foi registrada na mesma operação (o controlador pode confirmar mesmo assim).
+- **Sem conexão:** o registro fica salvo no aparelho, aparece como pendente no Histórico e é reenviado ao voltar a conexão (ou em "Enviar agora").
+
 ## Publicar em Produção
 A câmera do celular só abre em conexões seguras **HTTPS** (exceto em `localhost`). 
 Em produção, utilize um proxy reverso (Nginx, Caddy ou Cloudflare) com certificado SSL (Let's Encrypt).

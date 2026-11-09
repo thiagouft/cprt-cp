@@ -870,6 +870,13 @@ async function sincronizarRegistrosComBanco(){
      await DB.put(r);
     }
     S.records=data.registros.slice().sort((a,b)=>a.at<b.at?1:-1);
+    // registros ainda não confirmados pelo servidor continuam visíveis (e serão reenviados)
+    const fila=Fila.ids();
+    if(fila.length){
+     const locais=await DB.all();
+     locais.filter(x=>fila.indexOf(x.id)>-1&&!S.records.some(y=>y.id===x.id)).forEach(x=>S.records.push(x));
+     S.records.sort((a,b)=>a.at<b.at?1:-1);
+    }
     // Para poupar memória RAM no celular, remove referências pesadas de fotos antigas da memória ativa
     S.records.forEach(r=>{
      if(r.has_photos&&r.photos) delete r.photos;
@@ -906,11 +913,11 @@ function tileHtml(k){
 }
 
 function photosBlock(){
- const shots=opShots(S.op);
- const reqShots=['etiqueta','placa','cracha'];
+ const shots=S.carga?['etiqueta']:opShots(S.op);
+ const reqShots=S.carga?['etiqueta']:['etiqueta','placa','cracha'];
  const nReq=reqShots.filter(k=>S.photos[k]).length;
  const totalReq=reqShots.length;
- const hasNf=S.op==='mob'&&!!S.photos.notafiscal;
+ const hasNf=!S.carga&&S.op==='mob'&&!!S.photos.notafiscal;
  const progText=nReq+' de '+totalReq+' fotos obrigatórias'+(hasNf?' · Nota Fiscal anexada':'');
  return '<div class="prog"><span>'+progText+'</span><div class="bar"><i style="width:'+(nReq/totalReq*100)+'%"></i></div></div><div class="tiles">'+shots.map(tileHtml).join('')+'</div>';
 }
@@ -999,17 +1006,18 @@ function vForm(){
  const ctrl=Auth.user?Auth.user.nome:(S.form.controlador||'');
  const errs=S.summary&&S.summary.length?'<div class="alert" role="alert" id="errbox"><b>Revise antes de registrar ('+S.summary.length+')</b><ul>'+S.summary.map(m=>'<li>'+esc(m)+'</li>').join('')+'</ul></div>':'';
  return '<div class="opbar '+S.op+'"><span class="ico" style="color:var(--'+S.op+')">'+ic(S.op==='ret'?'out':'mob')+'</span><div style="flex:1"><div class="t">'+o.label+'</div><div class="s">Pátio '+esc(S.patio)+' · '+o.desc+'</div></div><button class="btn sm" data-act="resetop">'+ic('swap')+'Trocar</button></div>'+
- '<h2 class="sec"><span class="n">2</span>Fotos obrigatórias</h2><div id="photos">'+photosBlock()+'</div>'+
+ (S.carga?cargaCard():'')+
+ '<h2 class="sec"><span class="n">2</span>'+(S.carga?'Foto da etiqueta':'Fotos obrigatórias')+'</h2><div id="photos">'+photosBlock()+'</div>'+
  '<div id="dados">'+dadosHtml()+'</div>'+
- '<h2 class="sec"><span class="n">4</span>Veículo e motorista</h2><div class="card pad"><div class="grid">'+
+ (S.carga?'':'<h2 class="sec"><span class="n">4</span>Veículo e motorista</h2><div class="card pad"><div class="grid">'+
   fld({k:'placa',l:'Placa do caminhão',req:1,full:1,cls:'plate',ph:'ABC1D23',max:7,cap:1})+
   fld({k:'motorista',l:'Nome do motorista',req:1,full:1,ph:'Como está no crachá, CNH ou RG'})+
   fld({k:'empresa',l:'Empresa / transportadora',ph:'Preenchimento manual ou do crachá'})+
   fld({k:'cracha',l:'Nº do documento / crachá',ph:'Nº CNH, RG ou matrícula'})+
-  '</div></div>'+
- '<h2 class="sec"><span class="n">5</span>Localização e responsável</h2><div class="card pad"><div class="grid">'+
-  fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP,list:'dl-ruas',hint:'Escolha uma sugestão da lista para manter a mesma localização em todos os registros.'})+ruasDatalist()+
-  fld({k:'autorizador',l:o.autL,req:1,ph:o.autP})+
+  '</div></div>')+
+ '<h2 class="sec"><span class="n">5</span>'+(S.carga?'Controlador e observações':'Localização e responsável')+'</h2><div class="card pad"><div class="grid">'+
+  (S.carga?'':fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP,list:'dl-ruas',hint:'Escolha uma sugestão da lista para manter a mesma localização em todos os registros.'})+ruasDatalist()+
+  fld({k:'autorizador',l:o.autL,req:1,ph:o.autP}))+
   fld({k:'controlador',l:'Controlador',req:1,ph:'Seu nome'})+
   fld({k:'obs',l:'Observações',area:1,full:1,ph:'Avarias, divergências, ressalvas'})+
   '</div></div>'+
@@ -1029,11 +1037,13 @@ function recRows(r){
 }
 function dlHtml(r){return '<dl class="dl">'+recRows(r).map(x=>'<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>').join('')+'</dl>';}
 function vDone(){
- const r=S.done;
+ const r=S.done,emCarga=!!S.carga&&r.carga===S.carga.id;
  return '<div class="card done"><div class="big">'+ic('check')+'</div><h2>Registro concluído</h2><div class="muted">'+OPS[r.op].label+' · '+fdt(r.at)+'</div><div class="proto">'+esc(r.protocolo)+'</div>'+
  '<div class="muted" style="font-size:14px">Salvo com sucesso no banco de dados centralizado.</div></div>'+
  '<div class="card pad mt">'+dlHtml(r)+'</div>'+
- '<div class="sticky-cta"><button class="btn acc block" style="min-height:54px;font-size:17px" data-act="again">'+ic('plus')+'Novo registro</button>'+
+ '<div class="sticky-cta">'+(emCarga
+  ?'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="nextcarga">'+ic('plus')+'Próxima etiqueta desta carga ('+cargaItens().length+' registradas)</button><button class="btn block" data-act="endcarga">'+ic('check')+'Encerrar carga</button>'
+  :'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="again">'+ic('plus')+'Novo registro</button><button class="btn block" data-act="nextcarga">'+ic('list')+'Próxima etiqueta da mesma carga</button>')+
  '<div class="row"><button class="btn" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="gohist">'+ic('list')+'Ver histórico</button></div></div>';
 }
 
@@ -1059,6 +1069,7 @@ function vHist(){
  patioChips(0)+
  '<div class="chips">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['all','Todo o período']].map(([k,l])=>'<button class="chip" data-act="range" data-r="'+k+'" aria-pressed="'+(S.range===k)+'">'+l+'</button>').join('')+'</div>'+
  '<div class="row"><div class="f"><label for="dfrom">De</label><input id="dfrom" type="date" value="'+esc(S.from)+'"></div><div class="f"><label for="dto">Até</label><input id="dto" type="date" value="'+esc(S.to)+'"></div></div></div>'+
+ (Fila.ids().length?'<div class="alert" style="margin:0 0 12px"><b>'+Fila.ids().length+(Fila.ids().length===1?' registro aguardando':' registros aguardando')+' envio ao servidor.</b> Eles estão salvos neste aparelho e serão enviados quando houver conexão. <button class="btn sm" style="margin-top:8px" data-act="reenviar">Enviar agora</button></div>':'')+
  '<div class="note" style="margin-bottom:12px"><b>'+list.length+'</b> '+(list.length===1?'registro':'registros')+' · <b>'+nf(tot/1000,2)+' t</b>'+esc(per)+'</div>'+
  (list.length?'<div id="reclist">'+show.map(recItem).join('')+'</div>'+(list.length>show.length?'<button class="btn block" data-act="more">Mostrar mais ('+(list.length-show.length)+')</button>':'')+
    '<div class="row mt"><button class="btn" data-act="csv">'+ic('download')+'Exportar CSV ('+list.length+')</button></div>':
@@ -1379,6 +1390,68 @@ function resetForm(){
  S.busy={};S.errs={};S.summary=null;
  S.form={controlador:Auth.user?Auth.user.nome:Cfg.get('nome')};
  S.submitting=false;
+ if(S.carga)aplicaCarga();
+}
+
+/* ============ Fila de reenvio (registro salvo no aparelho e ainda não confirmado pelo servidor) ============ */
+const Fila={
+ ids(){try{return JSON.parse(localStorage.getItem('cprt_fila')||'[]');}catch(e){return [];}},
+ salva(a){try{localStorage.setItem('cprt_fila',JSON.stringify(a));}catch(e){}},
+ add(id){const a=this.ids();if(a.indexOf(id)<0){a.push(id);this.salva(a);}},
+ del(id){this.salva(this.ids().filter(x=>x!==id));}
+};
+async function enviarRegistro(r){
+ if(!Auth.token)return false;
+ try{
+  const res=await fetch('/api/registros',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(r)});
+  if(res.ok){Fila.del(r.id);return true;}
+ }catch(e){}
+ return false;
+}
+let reenviando=false;
+async function reenviarPendentes(){
+ if(reenviando||!Auth.token)return 0;
+ const ids=Fila.ids();if(!ids.length)return 0;
+ reenviando=true;let ok=0;
+ try{
+  const locais=await DB.all();
+  for(const id of ids){
+   const r=locais.find(x=>x.id===id)||S.records.find(x=>x.id===id);
+   if(!r){Fila.del(id);continue;}
+   if(await enviarRegistro(r))ok++;
+  }
+ }finally{reenviando=false;}
+ if(ok)toast(ok===1?'1 registro pendente foi enviado.':ok+' registros pendentes foram enviados.');
+ return ok;
+}
+window.addEventListener('online',()=>{reenviarPendentes().then(()=>{if(S.tab==='hist')render();});});
+
+/* ============ Carga: várias etiquetas da mesma carreta (placa, crachá e nota reaproveitados) ============ */
+function cargaItens(){return S.carga?S.records.filter(x=>x.carga===S.carga.id).sort((a,b)=>a.at<b.at?-1:1):[];}
+function aplicaCarga(){
+ const c=S.carga;if(!c)return;
+ S.op=c.op;
+ S.photos.placa=c.fotos.placa;S.photos.cracha=c.fotos.cracha;S.photos.notafiscal=c.fotos.notafiscal||null;
+ Object.assign(S.form,c.base);
+}
+function cargaCard(){
+ const c=S.carga,b=c.base,o=OPS[c.op],it=cargaItens(),kg=it.reduce((s,x)=>s+(x.kg||0),0);
+ const fotos=[['placa','Placa'],['cracha','Crachá'],['notafiscal','Nota Fiscal']].filter(([k])=>c.fotos[k]&&c.fotos[k].data)
+  .map(([k,l])=>'<figure><img src="'+c.fotos[k].data+'" alt="'+l+'"><figcaption>'+l+'</figcaption></figure>').join('');
+ return '<div class="card pad mt" style="border-left:6px solid var(--'+c.op+')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
+  '<div><div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Carga em andamento</div>'+
+  '<div style="font-family:var(--font-d);font-size:24px;font-weight:700;letter-spacing:.04em">'+esc(b.placa)+' · '+it.length+(it.length===1?' etiqueta':' etiquetas')+' · '+nf(kg/1000,2)+' t</div></div>'+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="editcarga">Editar dados</button><button class="btn sm" data-act="endcarga">Encerrar carga</button></div></div>'+
+  '<dl class="dl mt">'+[['Motorista',b.motorista],['Empresa',b.empresa],['Doc. / Crachá',b.cracha],[o.destL,b.destino],[o.autL,b.autorizador]].filter(x=>x[1]).map(x=>'<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>').join('')+'</dl>'+
+  (fotos?'<div class="photos3">'+fotos+'</div>':'')+
+  '<div class="hint muted" style="font-size:12.5px;margin-top:10px">Placa, crachá, nota e demais dados desta carga são reaproveitados. Fotografe só a próxima etiqueta.</div></div>';
+}
+function cargaResumoHtml(it){
+ if(!it.length)return '<div class="note">Nenhuma etiqueta registrada nesta carga.</div>';
+ const kg=it.reduce((s,x)=>s+(x.kg||0),0);
+ const desc=x=>x.prod==='barra'?[x.marca,x.lote&&('lote '+x.lote)].filter(Boolean).join(' · '):x.prod==='cord'?[x.material,x.descricao].filter(Boolean).join(' · '):[x.os&&('OS '+x.os),[x.desenho,x.posicao].filter(Boolean).join('/')].filter(Boolean).join(' · ');
+ return '<p style="margin-top:0"><b>'+it.length+'</b> '+(it.length===1?'etiqueta':'etiquetas')+' · <b>'+nf(kg/1000,2)+' t</b> · placa <b>'+esc(it[0].placa)+'</b></p><div class="pn-scroll"><table class="tbl"><thead><tr><th>#</th><th>Protocolo</th><th>Produto</th><th>Etiqueta</th><th class="r">Peso (kg)</th></tr></thead><tbody>'+
+  it.map((x,i)=>'<tr><td>'+(i+1)+'</td><td class="nw">'+esc(x.protocolo)+'</td><td class="nw">'+esc(prodName(x))+'</td><td>'+esc(desc(x))+'</td><td class="r">'+nf(x.kg||0,1)+'</td></tr>').join('')+'</tbody></table></div>';
 }
 
 async function submit(){
@@ -1395,17 +1468,20 @@ async function submit(){
   thumb: (S.photos.etiqueta && S.photos.etiqueta.thumb) ? S.photos.etiqueta.thumb : null,
   photos:{etiqueta:S.photos.etiqueta,placa:S.photos.placa,cracha:S.photos.cracha,notafiscal:S.photos.notafiscal||null}};
 
+ // Etiqueta que parece já registrada (mesma operação): avisa e deixa o controlador decidir
+ const chave=PainelCalc.chaveEtiqueta(r);
+ if(chave){
+  const igual=S.records.find(x=>x.id!==r.id&&PainelCalc.chaveEtiqueta(x)===chave);
+  if(igual&&!(await confirmBox('Esta etiqueta parece já registrada: '+igual.protocolo+' em '+fdt(igual.at)+(igual.controlador?' ('+igual.controlador+')':'')+'. Registrar mesmo assim?','Registrar mesmo assim'))){S.submitting=false;return;}
+ }
+ if(S.carga){r.carga=S.carga.id;r.cargaSeq=cargaItens().length+1;}
+
  await DB.put(r);
  S.records.unshift(r);
 
- // Enviar para o banco PostgreSQL no servidor
- if(Auth.token){
-  fetch('/api/registros',{
-   method:'POST',
-   headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
-   body:JSON.stringify(r)
-  }).catch(()=>{});
- }
+ // Enviar ao banco do servidor; se falhar, fica na fila e é reenviado quando a conexão voltar
+ Fila.add(r.id);
+ enviarRegistro(r).then(ok=>{if(!ok&&Auth.token)toast('Sem conexão com o servidor. O registro ficou salvo neste aparelho e será enviado quando a conexão voltar.');});
 
  S.done=r;resetForm();render();topo();
 }
@@ -1534,7 +1610,12 @@ document.addEventListener('click',async ev=>{
  if(a==='fpatio'){S.fp=t.dataset.p;S.limit=40;render();return;}
  if(a==='range'){const r=t.dataset.r,td=new Date();S.range=r;if(r==='all'){S.from='';S.to='';}else if(r==='today'){S.from=S.to=dkey(td);}else{const f=new Date();f.setDate(f.getDate()-(Number(r)-1));S.from=dkey(f);S.to=dkey(td);}S.limit=40;render();return;}
  if(a==='prod'){S.prod=t.dataset.p;S.prodManual=true;delete S.auto.prod;renderDados();return;}
- if(a==='resetop'){if(S.photos.etiqueta||S.photos.placa||S.photos.cracha||S.photos.notafiscal||S.form.os){if(!await confirmBox('Trocar a operação descarta as fotos e dados preenchidos.','Descartar e trocar'))return;}resetForm();render();return;}
+ if(a==='resetop'){
+  if(S.carga){
+   if(!await confirmBox('Trocar a operação encerra a carga em andamento. As etiquetas já registradas continuam salvas.','Encerrar e trocar'))return;
+   S.carga=null;resetForm();render();return;
+  }
+  if(S.photos.etiqueta||S.photos.placa||S.photos.cracha||S.photos.notafiscal||S.form.os){if(!await confirmBox('Trocar a operação descarta as fotos e dados preenchidos.','Descartar e trocar'))return;}resetForm();render();return;}
  if(a==='delphoto'){
   const k=t.dataset.k;
   if(k && S.photos[k]){
@@ -1558,7 +1639,44 @@ document.addEventListener('click',async ev=>{
   return;
  }
  if(a==='submit'){submit();return;}
- if(a==='again'){S.done=null;resetForm();render();topo();return;}
+ if(a==='again'){S.carga=null;S.done=null;resetForm();render();topo();return;}
+ if(a==='nextcarga'){
+  const r=S.done;if(!r)return;
+  if(!S.carga){
+   // primeira etiqueta vira a base da carga: reaproveita fotos e dados e marca o próprio registro como parte da carga
+   if(!r.photos||!r.photos.placa||!r.photos.cracha){toast('Não foi possível reaproveitar as fotos deste registro.');return;}
+   r.carga=r.id;r.cargaSeq=1;
+   S.carga={id:r.id,op:r.op,patio:r.patio,
+    fotos:{placa:r.photos.placa,cracha:r.photos.cracha,notafiscal:r.photos.notafiscal||null},
+    base:{placa:r.placa,motorista:r.motorista,empresa:r.empresa||'',cracha:r.cracha||'',destino:r.destino,autorizador:r.autorizador,controlador:r.controlador}};
+   await DB.put(r);Fila.add(r.id);enviarRegistro(r);
+  }
+  S.done=null;resetForm();render();topo();return;
+ }
+ if(a==='endcarga'){
+  const it=cargaItens();
+  S.carga=null;S.done=null;resetForm();render();topo();
+  sheet('Carga encerrada',cargaResumoHtml(it),'<div class="row mt"><button class="btn pri" data-act="closelayer">Concluir</button></div>');
+  return;
+ }
+ if(a==='editcarga'){
+  const b=S.carga.base,o=OPS[S.carga.op];
+  sheet('Editar dados da carga','<p class="muted" style="margin-top:0">As alterações valem para as próximas etiquetas desta carga. Os registros já salvos não mudam.</p><div class="grid">'+
+   [['placa','Placa do caminhão',b.placa],['motorista','Nome do motorista',b.motorista],['empresa','Empresa / transportadora',b.empresa],['cracha','Nº do documento / crachá',b.cracha],['destino',o.destL,b.destino],['autorizador',o.autL,b.autorizador]]
+   .map(([k,l,v])=>'<div class="f'+(k==='motorista'||k==='destino'?' full':'')+'"><label for="ec-'+k+'">'+esc(l)+'</label><input id="ec-'+k+'" value="'+esc(v)+'"'+(k==='destino'?' list="dl-ruas"':'')+(k==='placa'?' maxlength="7" autocapitalize="characters"':'')+' autocomplete="off"></div>').join('')+'</div>'+ruasDatalist(),
+   '<div class="row mt"><button class="btn pri" data-act="savecarga">Salvar</button></div>');
+  return;
+ }
+ if(a==='savecarga'){
+  const v=k=>($('#ec-'+k)?$('#ec-'+k).value:'').trim();
+  const placa=v('placa').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa)){toast('Placa inválida. Use o formato ABC1D23 ou ABC1234');return;}
+  if(!v('motorista')||!v('destino')||!v('autorizador')){toast('Preencha motorista, localização e autorizador.');return;}
+  Object.assign(S.carga.base,{placa,motorista:v('motorista'),empresa:v('empresa'),cracha:v('cracha'),destino:v('destino'),autorizador:v('autorizador')});
+  Object.assign(S.form,S.carga.base);
+  closeLayer();render();toast('Dados da carga atualizados.');return;
+ }
+ if(a==='reenviar'){toast('Enviando registros pendentes…');await reenviarPendentes();await sincronizarRegistrosComBanco();render();return;}
  if(a==='gohist'){S.tab='hist';render();topo();sincronizarRegistrosComBanco();return;}
  if(a==='filter'){S.filter=t.dataset.f;S.limit=40;render();return;}
  if(a==='more'){S.limit+=40;render();return;}
@@ -1743,6 +1861,7 @@ document.addEventListener('click',async ev=>{
    S.tab='novo';
    S.op=null;
    S.done=null;
+   S.carga=null;
    resetForm();
    render();
    topo();
@@ -1912,7 +2031,7 @@ async function sincronizarUsuarioLogado(){
  render();
  if(Auth.token){
   sincronizarUsuarioLogado();
-  sincronizarRegistrosComBanco();
+  reenviarPendentes().then(sincronizarRegistrosComBanco);
  }
 })();
 })();
