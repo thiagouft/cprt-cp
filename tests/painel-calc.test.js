@@ -113,7 +113,7 @@ ga.ultimas25.forEach((u, i) => {
 ga.localPadronizado.forEach((v, i) => { if (L[i].local !== v) check('local linha ' + (i + 2) + ' (' + registros[i].destino + ')', false, 'obtido=' + L[i].local + ' esperado=' + v); else ok++; });
 
 /* =============== 2) Correções de grafia (modo normal) =============== */
-secao('Nome da Rua — correções sobre a planilha');
+secao('Localização — correções sobre a planilha');
 PC.setModoPlanilha(false);
 const casos = { 'Patio de ferragens lll': 'Pátio de Ferragens III', 'Pátio de ferragens Ill': 'Pátio de Ferragens III', 'Padio de Ferragens 3': 'Pátio de Ferragens III', 'Patio ferragens IV': 'Pátio de Ferragens IV',
   'Arcelormital': 'ARCELORMITTAL', 'ArcelorMittal': 'ARCELORMITTAL', 'Marabá': 'Marabá', '': '(sem local)', 'CPRT': 'CPRT', 'Pátio de ferragens3': 'Pátio de Ferragens III',

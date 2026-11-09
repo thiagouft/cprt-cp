@@ -27,7 +27,7 @@ const regs = rows.map(r => {
   return { id: g('Protocolo') + '|' + g('Data') + g('Hora') + g('Peso (kg)'), protocolo: g('Protocolo'), op: g('Operação') === 'Retirada' ? 'ret' : 'mob', at: new Date(y, m - 1, d, h, mi).toISOString(),
     controlador: g('Controlador'), patio: g('Pátio'), prod, os: g('OS / Ordem de produção'), ordem: g('OS / Ordem de produção'), cpt: g('CPT/CPM/DF'), desenho: g('Desenho'), posicao: g('Posição'), cj: g('CJ'),
     elemento: g('Elemento'), bitola: br(g('Bitola / Diâmetro (mm)')), comp: br(g('Comp. (cm)')), qtd: br(g('Barras')), m: br(g('Metros / Metragem')), kg: br(g('Peso (kg)')),
-    placa: g('Placa'), motorista: g('Motorista'), empresa: g('Empresa'), destino: g('Nome da Rua') || g('Destino'), obs: g('Observações') };
+    placa: g('Placa'), motorista: g('Motorista'), empresa: g('Empresa'), destino: g('Localização') || g('Nome da Rua') || g('Destino'), obs: g('Observações') };
 });
 const L = PC.normalizar(regs), P = PC.painel(L, {}), A = PC.acoPronto(L, {});
 const f = (n, d = 2) => n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -38,5 +38,5 @@ const cont = (arr, k) => arr.reduce((m, x) => (m[x[k]] = (m[x[k]] || 0) + 1, m),
 console.log('\nPátios na base:', JSON.stringify(cont(L, 'patio')));
 console.log('Pátios no Painel (peso t):', P.porPatio.map(p => p.patio + ' ' + f(p.t)).join(' | '));
 const ruim = c => rows.filter(r => /\?\?/.test(r[ix(c)])).length;
-console.log('\nLinhas com "??" (acento perdido):', ['Pátio', 'Controlador', 'Nome da Rua', 'Empresa', 'Observações', 'Elemento'].map(c => c + ' ' + ruim(c)).join(' | '));
+console.log('\nLinhas com "??" (acento perdido):', ['Pátio', 'Controlador', 'Localização', 'Empresa', 'Observações', 'Elemento'].map(c => c + ' ' + ruim(c)).join(' | '));
 if (ruim('Pátio')) console.log('⚠ Os acentos foram perdidos ao gravar/importar: "São Félix" virou "S??o F??lix". Corrija a origem (UTF-8) e reimporte.');

@@ -41,7 +41,7 @@ Acesse no navegador:
 ## Painel
 Menu **Painel** com duas visões, calculadas em tempo real sobre todos os registros do banco (mesmas colunas do Histórico e do CSV):
 - **Painel geral:** registros, entradas, retiradas, peso, barras, saldo no pátio, peso por dia, por pátio, por controlador, por bitola e produto (aço pronto, barra reta e cordoalha) e últimos registros.
-- **Aço pronto:** onde está o aço por pátio e Nome da Rua, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
+- **Aço pronto:** onde está o aço por pátio e Localização, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
 
 Filtros: busca de texto (em todos os campos ou em uma coluna), pátio, operação, produto, período (Hoje, 7 dias, 30 dias, todo o período) e datas De/Até livres.
 

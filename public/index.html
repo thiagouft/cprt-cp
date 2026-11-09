@@ -6,6 +6,8 @@
 <title>Controle de Aço CPRT</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0E1A2B">
+<script>/* aplica o tema salvo antes de desenhar a página (evita piscar). Sem escolha salva, segue o do aparelho. */
+try{var _t=localStorage.getItem('cprt_tema');if(_t!=='dark'&&_t!=='light')_t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
@@ -253,6 +255,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
       </div>
       <div id="top-actions" style="display:none;align-items:center;gap:8px">
         <span id="user-display" class="user-badge" style="display:none"></span>
+        <button class="iconbtn" data-act="theme" aria-label="Alternar tema claro/escuro" id="btn-theme" title="Alternar tema"></button>
         <button class="iconbtn" data-act="settings" aria-label="Ajustes" id="btn-settings" title="Ajustes"></button>
         <button class="iconbtn" data-act="logout" aria-label="Sair" id="btn-logout" title="Sair"></button>
       </div>
@@ -280,7 +283,9 @@ const IC={
  list:'<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
  chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
- gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
  x:'<path d="M6 6l12 12M18 6L6 18"/>',
  download:'<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
@@ -301,6 +306,26 @@ const fdt=iso=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digi
 const fdate=iso=>new Date(iso).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
 const dkey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
 const $=(s,r)=>(r||document).querySelector(s);
+
+/* ============ Tema claro / escuro ============ */
+const Tema={
+ salvo(){try{const t=localStorage.getItem('cprt_tema');return t==='dark'||t==='light'?t:'';}catch(e){return '';}},
+ atual(){return this.salvo()||((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light');},
+ aplica(){
+  const t=this.atual();
+  document.documentElement.setAttribute('data-theme',t);
+  const m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#070D16':'#0E1A2B');
+  this.sync();
+ },
+ sync(){ // o ícone mostra para qual tema vai ao clicar: sol (ir para claro) no escuro, lua (ir para escuro) no claro
+  const b=document.getElementById('btn-theme');if(!b)return;
+  const t=this.atual(),alvo=t==='dark'?'claro':'escuro';
+  b.innerHTML=ic(t==='dark'?'sun':'moon');
+  b.setAttribute('aria-label','Mudar para o tema '+alvo);b.title='Mudar para o tema '+alvo;
+ },
+ alterna(){try{localStorage.setItem('cprt_tema',this.atual()==='dark'?'light':'dark');}catch(e){}this.aplica();}
+};
+if(window.matchMedia)try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(!Tema.salvo())Tema.aplica();});}catch(e){}
 
 /* ============ Gerenciamento de Sessão ============ */
 const Auth={
@@ -349,8 +374,8 @@ const KGM={'5.0':0.154,'6.3':0.245,'8.0':0.395,'10.0':0.617,'12.5':0.963,'16.0':
 const ACOS=['CA-50S','CA-60','CA-25'];
 const ELEM=['PILAR','BLOCO','SAPATA','ESTACA','VIGA','LAJE','TRAVESSA','ENCONTRO','CORTINA','LONGARINA','TRANSVERSINA'];
 const OPS={
-  ret:{label:'Retirada',pre:'RET',desc:'Aço sai do pátio com transportador identificado.',destL:'Nome da Rua',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Autorizado por',autP:'Nome de quem autorizou'},
-  mob:{label:'Entrada',pre:'ENT',desc:'Material recebido no pátio com o transportador identificado.',destL:'Nome da Rua',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Conferido por',autP:'Nome de quem conferiu o recebimento'}
+  ret:{label:'Retirada',pre:'RET',desc:'Aço sai do pátio com transportador identificado.',destL:'Localização',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Autorizado por',autP:'Nome de quem autorizou'},
+  mob:{label:'Entrada',pre:'ENT',desc:'Material recebido no pátio com o transportador identificado.',destL:'Localização',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Conferido por',autP:'Nome de quem conferiu o recebimento'}
 };
 const PATIOS=['Marabá','São Félix'];
 const CODIGOS=['CPT','CTP','CPM','DF'];
@@ -482,7 +507,7 @@ function validate(){
  }
  if(!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(f.placa||'')) add('placa','Placa inválida. Use o formato ABC1D23 ou ABC1234');
  if(!(f.motorista||'').trim()) add('motorista','Informe o nome do motorista');
- if(!(f.destino||'').trim()) add('destino','Informe o nome da rua');
+ if(!(f.destino||'').trim()) add('destino','Informe a localização');
  if(!(f.autorizador||'').trim()) add('autorizador','Informe '+OPS[S.op].autL.toLowerCase());
  const ctrl=Auth.user?Auth.user.nome:(f.controlador||'').trim();
  if(!ctrl) add('controlador','Informe o nome do controlador');
@@ -494,6 +519,7 @@ const view=$('#view');
 function topo(){try{view.scrollTop=0;}catch(e){}window.scrollTo(0,0);}
 
 function renderTabs(){
+ Tema.sync();
  const topIn=$('#top-in')||$('.top-in');
  if(!Auth.user || Auth.user.trocar_senha){
   $('#tabs').innerHTML='';
@@ -981,8 +1007,8 @@ function vForm(){
   fld({k:'empresa',l:'Empresa / transportadora',ph:'Preenchimento manual ou do crachá'})+
   fld({k:'cracha',l:'Nº do documento / crachá',ph:'Nº CNH, RG ou matrícula'})+
   '</div></div>'+
- '<h2 class="sec"><span class="n">5</span>Nome da Rua e responsável</h2><div class="card pad"><div class="grid">'+
-  fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP,list:'dl-ruas',hint:'Escolha uma sugestão da lista para manter o mesmo nome em todos os registros.'})+ruasDatalist()+
+ '<h2 class="sec"><span class="n">5</span>Localização e responsável</h2><div class="card pad"><div class="grid">'+
+  fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP,list:'dl-ruas',hint:'Escolha uma sugestão da lista para manter a mesma localização em todos os registros.'})+ruasDatalist()+
   fld({k:'autorizador',l:o.autL,req:1,ph:o.autP})+
   fld({k:'controlador',l:'Controlador',req:1,ph:'Seu nome'})+
   fld({k:'obs',l:'Observações',area:1,full:1,ph:'Avarias, divergências, ressalvas'})+
@@ -1139,7 +1165,7 @@ function pnBody(R){
 
  // últimos registros
  const tr=R.ultimos.map(u=>'<tr><td><span class="pill '+(u.operacao==='Retirada'?'ret':'mob')+'">'+esc(u.operacao)+'</span></td><td class="nw"><b>'+esc(u.placa)+'</b></td><td class="nw">'+esc(u.data)+'</td><td>'+esc(u.hora)+'</td><td class="nw">'+esc(u.patio)+'</td><td class="nw">'+esc(u.produto)+'</td><td class="r">'+(u.bitola==null?'':nf(u.bitola,u.bitola%1?1:0))+'</td><td class="r">'+(u.produto==='Cordoalha'?'':nf(u.barras,0))+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.motorista)+'</td><td class="nw">'+esc(u.controlador)+'</td><td>'+esc(u.rua)+'</td></tr>').join('');
- const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Nome da Rua</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
+ const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Localização</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
 
  return '<div class="pn-sum">'+resumo+'</div>'+kpis+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+ult+
   '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.</div>';
@@ -1171,7 +1197,7 @@ function acBarra(R){
  return '<div class="card pad"><div class="pn-bar">'+
   '<div class="f busca"><label for="af-busca">Buscar</label><input id="af-busca" data-af="busca" type="search" value="'+esc(f.busca)+'" placeholder="Texto parcial: desenho, posição, CJ, etiqueta, OS, observação…" autocomplete="off"></div>'+
   selHtml('af','campo','Buscar em',o.campos,f.campo)+
-  selHtml('af','local','Nome da Rua',o.locais,f.local)+
+  selHtml('af','local','Localização',o.locais,f.local)+
   selHtml('af','patio','Pátio',o.patios,f.patio)+
   selHtml('af','operacao','Operação',o.operacoes,f.operacao)+
   selHtml('af','elemento','Elemento',o.elementos,f.elemento)+
@@ -1201,15 +1227,15 @@ function acBody(R){
   kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',nf(k.saldoBarras,0)+' barras · '+nf(k.saldoEtiquetas,0)+' etiquetas (entradas − retiradas)',pnSaldoCls(k.saldoT))+'</div>';
  if(!k.etiquetas)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhuma etiqueta com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
- // onde está o aço (Operação | Pátio | Nome da Rua)
+ // onde está o aço (Operação | Pátio | Localização)
  const trO=R.onde.map(o=>'<tr><td>'+pillOp(o.operacao)+'</td><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.etiquetas,0)+'</td><td class="r">'+nf(o.desenhos,0)+'</td><td class="r">'+nf(o.barras,0)+'</td><td class="r"><b>'+nf(o.t,2)+'</b></td><td class="r">'+nf(o.pct*100,1)+'%</td><td class="nw">'+esc(o.ultimaTxt)+'</td><td style="min-width:200px">'+esc(o.principais)+'</td></tr>').join('');
- const onde='<h2 class="sec">Onde está o aço pronto — por pátio e nome da rua (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Pátio</th><th>Nome da Rua</th><th class="r">Etiquetas</th><th class="r">Desenhos</th><th class="r">Barras</th><th class="r">Peso (t)</th><th class="r">% peso</th><th>Última mov.</th><th>Principais desenhos (maior peso primeiro)</th></tr></thead><tbody>'+trO+'</tbody></table></div>';
+ const onde='<h2 class="sec">Onde está o aço pronto — por pátio e localização (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Pátio</th><th>Localização</th><th class="r">Etiquetas</th><th class="r">Desenhos</th><th class="r">Barras</th><th class="r">Peso (t)</th><th class="r">% peso</th><th>Última mov.</th><th>Principais desenhos (maior peso primeiro)</th></tr></thead><tbody>'+trO+'</tbody></table></div>';
 
- // saldo por pátio e nome da rua
+ // saldo por pátio e localização
  const sl=R.saldoLocal,sT=(a)=>sl.reduce((x,o)=>x+o[a],0);
  const trS=sl.map(o=>'<tr><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.entEtiquetas,0)+'</td><td class="r">'+nf(o.retEtiquetas,0)+'</td><td class="r">'+nf(o.entBarras,0)+'</td><td class="r">'+nf(o.retBarras,0)+'</td><td class="r">'+nf(o.entT,2)+'</td><td class="r">'+nf(o.retT,2)+'</td><td class="r"><b>'+sinal(o.saldoBarras,0)+'</b></td><td class="r"><b>'+sinal(o.saldoT,2)+'</b></td></tr>').join('')+
   '<tr class="tot"><td colspan="2">Total</td><td class="r">'+nf(sT('entEtiquetas'),0)+'</td><td class="r">'+nf(sT('retEtiquetas'),0)+'</td><td class="r">'+nf(sT('entBarras'),0)+'</td><td class="r">'+nf(sT('retBarras'),0)+'</td><td class="r">'+nf(sT('entT'),2)+'</td><td class="r">'+nf(sT('retT'),2)+'</td><td class="r">'+sinal(sT('saldoBarras'),0)+'</td><td class="r">'+sinal(sT('saldoT'),2)+'</td></tr>';
- const saldo='<h2 class="sec">Saldo por pátio e nome da rua — entradas − retiradas</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Pátio</th><th>Nome da Rua</th><th class="r">Etiq. entrada</th><th class="r">Etiq. retirada</th><th class="r">Barras entrada</th><th class="r">Barras retirada</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo barras</th><th class="r">Saldo (t)</th></tr></thead><tbody>'+trS+'</tbody></table></div>';
+ const saldo='<h2 class="sec">Saldo por pátio e localização — entradas − retiradas</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Pátio</th><th>Localização</th><th class="r">Etiq. entrada</th><th class="r">Etiq. retirada</th><th class="r">Barras entrada</th><th class="r">Barras retirada</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo barras</th><th class="r">Saldo (t)</th></tr></thead><tbody>'+trS+'</tbody></table></div>';
 
  // gráficos
  const mE=Math.max(0.0001,...R.topElementos.map(e=>e.t)),mD=Math.max(0.0001,...R.topDesenhos.map(e=>e.t)),mB=Math.max(0.0001,...R.porBitola.map(e=>e.t));
@@ -1229,12 +1255,12 @@ function acBody(R){
  // resumo por desenho
  const trD=R.resumoDesenhos.map(r=>'<tr><td class="nw"><b>'+esc(r.desenho)+'</b></td><td class="nw">'+esc(r.cpt)+'</td><td>'+esc(r.elementos)+'</td><td class="r">'+nf(r.nOS,0)+'</td><td class="r">'+nf(r.posicoes,0)+'</td><td class="nw">'+esc(r.bitolas)+'</td><td class="r">'+nf(r.etiquetas,0)+'</td><td class="r">'+nf(r.barras,0)+'</td><td class="r">'+nf(r.metros,0)+'</td><td class="r"><b>'+nf(r.t,2)+'</b></td><td class="r">'+nf(r.pct*100,1)+'%</td><td class="r">'+nf(r.entT,2)+'</td><td class="r">'+nf(r.retT,2)+'</td><td class="r"><b>'+sinal(r.saldoT,2)+'</b></td><td class="r">'+sinal(r.saldoBarras,0)+'</td><td class="nw">'+esc(r.ultimaTxt)+'</td><td style="min-width:200px">'+esc(r.locais)+'</td><td style="min-width:260px">'+esc(r.obs)+'</td></tr>').join('');
  const sd=R.semDesenho;
- const resD='<h2 class="sec">Resumo por desenho — top '+R.resumoDesenhos.length+' por peso (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Desenho</th><th>CPT/CPM/DF</th><th>Elemento</th><th class="r">Nº OS</th><th class="r">Posições</th><th>Bitolas (mm)</th><th class="r">Etiquetas</th><th class="r">Barras</th><th class="r">Metros</th><th class="r">Peso (t)</th><th class="r">% peso</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo (t)</th><th class="r">Saldo barras</th><th>Última mov.</th><th>Nome da Rua (pátio · rua)</th><th>Ordens de produção · observação</th></tr></thead><tbody>'+trD+'</tbody></table>'+
+ const resD='<h2 class="sec">Resumo por desenho — top '+R.resumoDesenhos.length+' por peso (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Desenho</th><th>CPT/CPM/DF</th><th>Elemento</th><th class="r">Nº OS</th><th class="r">Posições</th><th>Bitolas (mm)</th><th class="r">Etiquetas</th><th class="r">Barras</th><th class="r">Metros</th><th class="r">Peso (t)</th><th class="r">% peso</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo (t)</th><th class="r">Saldo barras</th><th>Última mov.</th><th>Localização (pátio · local)</th><th>Ordens de produção · observação</th></tr></thead><tbody>'+trD+'</tbody></table>'+
   (sd.etiquetas?'<div class="hint muted" style="font-size:12.5px;margin-top:8px">'+nf(sd.etiquetas,0)+' etiquetas sem desenho informado ('+nf(sd.t,2)+' t, saldo '+nf(sd.saldoT,2)+' t) não aparecem neste resumo, mas entram nos totais acima.</div>':'')+'</div>';
 
  // últimas etiquetas
  const trU=R.ultimas.map(u=>'<tr><td class="nw">'+esc(u.data)+' '+esc(u.hora)+'</td><td class="nw">'+esc(u.os)+'</td><td>'+pillOp(u.operacao)+'</td><td class="nw">'+esc(u.cpt)+'</td><td class="nw"><b>'+esc(u.desenho)+'</b></td><td class="nw">'+esc(u.posicao)+'</td><td class="nw">'+esc(u.cj)+'</td><td class="nw">'+esc(u.elemento)+'</td><td class="r">'+(u.bitola==null?'':PainelCalc.fmtNum(u.bitola))+'</td><td class="r">'+(u.comp==null?'':nf(u.comp,0))+'</td><td class="r">'+nf(u.barras,0)+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.local)+'</td><td style="min-width:200px">'+esc(u.obs)+'</td></tr>').join('');
- const ult='<h2 class="sec">Últimas '+R.ultimas.length+' etiquetas de aço pronto (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Data / hora</th><th>OS</th><th>Operação</th><th>CPT/CPM/DF</th><th>Desenho</th><th>Posição</th><th>CJ</th><th>Elemento</th><th class="r">Bitola</th><th class="r">Comp. (cm)</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Pátio · Nome da Rua</th><th>Observações</th></tr></thead><tbody>'+trU+'</tbody></table></div>';
+ const ult='<h2 class="sec">Últimas '+R.ultimas.length+' etiquetas de aço pronto (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Data / hora</th><th>OS</th><th>Operação</th><th>CPT/CPM/DF</th><th>Desenho</th><th>Posição</th><th>CJ</th><th>Elemento</th><th class="r">Bitola</th><th class="r">Comp. (cm)</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Pátio · Localização</th><th>Observações</th></tr></thead><tbody>'+trU+'</tbody></table></div>';
 
  return '<div class="pn-sum">'+resumo+'</div>'+kpis+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
   '<div class="note mt">Fonte: registros de Aço pronto do sistema (mesmas colunas do Histórico e do CSV). O saldo é a soma das entradas menos as retiradas registradas; ele só reflete a realidade se as retiradas também forem lançadas.</div>';
@@ -1321,7 +1347,7 @@ async function saveFile(filename,text,mime){
  }else toast('Download indisponível neste navegador.');
 }
 function csvOf(list){
- const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Nome da Rua','Autorizado/Solicitado por','Observações','Nota Fiscal'];
+ const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Localização','Autorizado/Solicitado por','Observações','Nota Fiscal'];
  const q=v=>{v=v==null?'':String(v);return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
  const rows=list.slice().sort((a,b)=>a.at<b.at?-1:1).map(r=>{const d=new Date(r.at),cord=r.prod==='cord';
   return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data)?'Sim':'Não'].map(q).join(';');});
@@ -1498,6 +1524,7 @@ document.addEventListener('click',async ev=>{
  }
  if(a==='pn-refresh'){pnCarregar();return;}
  if(a==='pn-limpar'){PX.f=pnPadrao();render();return;}
+ if(a==='theme'){Tema.alterna();return;}
  if(a==='pn-vis'){PX.vis=t.dataset.v==='aco'?'aco':'geral';render();return;}
  if(a==='ac-limpar'){AX.f=acPadrao();render();return;}
  if(a==='ac-janela'){AX.janela=t.dataset.j==='periodo'?'periodo':7;render();return;}

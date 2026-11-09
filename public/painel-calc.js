@@ -15,7 +15,7 @@
     'Código etiqueta / barras', 'CPT/CPM/DF', 'Material', 'Descrição / Marca', 'Corrida', 'Feixe', 'Lote', 'Desenho', 'Posição',
     'CJ', 'Elemento', 'Bitola / Diâmetro (mm)', 'Aço / Classe', 'Comp. (cm)', 'Barras', 'Metros / Metragem', 'Peso (kg)',
     'Peso bruto (kg)', 'Torção', 'Resistência', 'Norma', 'Data fabricação', 'RE', 'Placa', 'Motorista', 'Empresa', 'Crachá',
-    'Nome da Rua', 'Autorizado/Solicitado por', 'Observações', 'Nota Fiscal'];
+    'Localização', 'Autorizado/Solicitado por', 'Observações', 'Nota Fiscal'];
   var BITOLAS = [6.3, 8, 10, 12.5, 16, 20, 25, 32];
   var PATIOS = ['Marabá', 'São Félix'];
   var PRODUTOS = { aco: 'Aço pronto', barra: 'Barra reta', cord: 'Cordoalha' };
@@ -78,7 +78,7 @@
     return arr.map(function (v, i) { return [v, i]; }).sort(function (x, y) { return cmp(x[0], y[0]) || x[1] - y[1]; }).map(function (x) { return x[0]; });
   }
 
-  /* ---------- Nome da Rua padronizado (aba Cálculos AP, coluna BU) ---------- */
+  /* ---------- Localização padronizada (aba Cálculos AP, coluna BU) ---------- */
   var ROMANOS = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V' };
   var APELIDOS = { 'ARCELORMITAL': 'ARCELORMITTAL' };
   var modoPlanilha = false; // true = reproduz a planilha exatamente (sem correções de grafia); usado nos testes
@@ -147,7 +147,7 @@
     if (!t) return true;
     if (!campo || campo === 'Todos os campos') return L.texto.indexOf(t) > -1;
     var i = COLUNAS.indexOf(campo);
-    if (i < 0 && campo === 'Destino') i = COLUNAS.indexOf('Nome da Rua');
+    if (i < 0 && (campo === 'Destino' || campo === 'Nome da Rua')) i = COLUNAS.indexOf('Localização'); // nomes antigos da coluna
     return i > -1 && L.campos[i].indexOf(t) > -1;
   }
   function igual(a, b) { return sobe(a) === sobe(b); }
