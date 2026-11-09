@@ -270,7 +270,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=28"></script>
+<script src="painel-calc.js?v=29"></script>
 <script>
 (function(){
 'use strict';
@@ -1064,7 +1064,8 @@ function vDone(){
  '<div class="sticky-cta">'+(emCarga
   ?'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="nextcarga">'+ic('plus')+'Próxima etiqueta desta carga ('+cargaItens().length+' registradas)</button><button class="btn block" data-act="endcarga">'+ic('check')+'Encerrar carga</button>'
   :'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="again">'+ic('plus')+'Novo registro</button><button class="btn block" data-act="nextcarga">'+ic('list')+'Próxima etiqueta da mesma carga</button>')+
- '<div class="row"><button class="btn" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="gohist">'+ic('list')+'Ver histórico</button></div></div>';
+ '<div class="row"><button class="btn" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="gohist">'+ic('list')+'Histórico</button>'+
+  (emCarga?'':'<button class="btn pri" data-act="again">'+ic('check')+'Finalizar</button>')+'</div></div>';
 }
 
 function filtered(){
@@ -1720,6 +1721,7 @@ document.addEventListener('click',async ev=>{
  if(a==='closezoom'){const z=t.closest('.lightbox')||t;if(ev.target===t||ev.target.closest('.iconbtn')){const lb=$('.lightbox');if(lb)lb.remove();}return;}
  if(a==='tab'){
   S.tab=t.dataset.tab;
+  if(S.tab==='novo'&&S.done)S.done=null; // tocar em "Registrar" sai da tela "Registro concluído" (o registro já está salvo)
   render();
   topo();
   if(S.tab==='hist') sincronizarRegistrosComBanco();
