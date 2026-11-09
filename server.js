@@ -223,7 +223,13 @@ async function ler(req, res, user) {
     if (!r.ok) { console.error('Anthropic HTTP', r.status, (await r.text()).slice(0, 300)); return json(res, 502, { erro: 'A leitura falhou no provedor.' }); }
     const out = await r.json();
     const texto = (out.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-    const parsed = extrairJson(texto);
+    let parsed;
+    try { parsed = extrairJson(texto); }
+    catch (e) {
+      // Diagnóstico: o que a IA respondeu no lugar do JSON (foto ruim? recusa? resposta vazia?)
+      e.detalhe = 'tipo=' + dados.tipo + ' | stop_reason=' + (out.stop_reason || '?') + ' | foto=' + Math.round(img.length * 0.75 / 1024) + 'KB | resposta=' + JSON.stringify(texto.slice(0, 150));
+      throw e;
+    }
     if (dados && dados.tipo === 'cracha' && parsed && typeof parsed === 'object') {
       if (parsed.tipo_doc === 'rg' || parsed.registro_geral) {
         parsed.cracha = parsed.registro_geral || parsed.cracha || null;
@@ -233,7 +239,7 @@ async function ler(req, res, user) {
     }
     return json(res, 200, { dados: parsed });
   } catch (e) {
-    console.error('Falha na leitura:', e.message);
+    console.error('Falha na leitura:', e.message, e.detalhe ? '| ' + e.detalhe : '| tipo=' + (dados && dados.tipo));
     return json(res, 502, { erro: 'Não foi possível ler a foto.' });
   }
 }
