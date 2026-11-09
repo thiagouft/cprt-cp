@@ -41,13 +41,14 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-b);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 svg.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.app{min-height:100%;display:flex;flex-direction:column}
-header.top{background:var(--hdr);color:var(--hdr-ink);padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;position:sticky;top:0;z-index:20;border-bottom:3px solid var(--accent)}
+/* Layout em tela cheia: cabeçalho e barra de botões ficam fixos nas pontas e só o conteúdo rola (evita a barra "flutuar" no Safari do iOS). */
+.app{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column}
+header.top{flex:none;background:var(--hdr);color:var(--hdr-ink);padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;position:relative;z-index:20;border-bottom:3px solid var(--accent)}
 .top-in{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px}
 .top-in.is-login{justify-content:center}
 .top-in.is-login .grow{flex:0 1 auto}
@@ -58,8 +59,8 @@ header.top{background:var(--hdr);color:var(--hdr-ink);padding:calc(env(safe-area
 .top .grow{flex:1;min-width:0}
 .iconbtn{background:transparent;border:1px solid rgba(255,255,255,.22);color:var(--hdr-ink);width:40px;height:40px;border-radius:10px;display:grid;place-items:center;cursor:pointer;flex:none}
 .iconbtn:hover{background:rgba(255,255,255,.1)}
-main{flex:1;width:100%;max-width:760px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+main{flex:1;min-height:0;width:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0;padding:16px max(16px,calc((100% - 760px)/2)) 24px}
+nav.tabs{flex:none;position:relative;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
 nav.tabs .in{max-width:760px;margin:0 auto;display:grid;gap:6px}
 .tab{border:0;background:transparent;border-radius:12px;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;position:relative}
 .tab[aria-current="page"]{color:var(--primary);background:var(--surface2)}
@@ -130,7 +131,7 @@ h2.sec .n{background:var(--ink);color:var(--surface);width:22px;height:22px;bord
 .alert{background:var(--bad-bg);border:1.5px solid var(--bad);color:var(--bad);border-radius:12px;padding:12px 14px;font-size:14px;margin:12px 0}
 .alert ul{margin:6px 0 0;padding-left:20px}
 .note{background:var(--surface2);border-left:4px solid var(--primary);padding:10px 12px;border-radius:8px;font-size:13px;color:var(--muted)}
-.sticky-cta{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));z-index:15;margin-top:16px;display:flex;flex-direction:column;gap:8px}
+.sticky-cta{position:sticky;bottom:8px;z-index:15;margin-top:16px;display:flex;flex-direction:column;gap:8px}
 .done{text-align:center;padding:28px 16px}
 .done .big{width:64px;height:64px;border-radius:99px;background:var(--ok-bg);color:var(--ok);display:grid;place-items:center;margin:0 auto 12px}
 .done .big svg{width:36px;height:36px;stroke-width:2.5}
@@ -160,7 +161,7 @@ h2.sec .n{background:var(--ink);color:var(--surface);width:22px;height:22px;bord
 .kpi .k{font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em}
 .kpi .v{font-family:var(--font-d);font-size:32px;font-weight:700;margin-top:4px}
 .kpi .v small{font-size:14px;font-family:var(--font-b);color:var(--muted)}
-.chart{display:flex;gap:6px;align-items:flex-end;height:140px;padding:12px 0 4px}
+.chart{display:flex;gap:6px;align-items:flex-end;height:156px;padding:28px 0 4px}
 .chart .day{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;gap:4px}
 .chart .bars{display:flex;gap:3px;align-items:flex-end;height:100%;width:100%;max-width:32px}
 .chart .b{flex:1;border-radius:4px 4px 0 0;min-height:3px;position:relative}
@@ -204,6 +205,41 @@ textarea.exp{width:100%;min-height:180px;font-family:ui-monospace,Menlo,Consolas
 .aist svg{width:16px;height:16px;stroke-width:3}
 .spin.sm{width:16px;height:16px;border-width:2.5px}
 .user-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:8px;font-size:12.5px;font-weight:600}
+/* ---- Painel (dashboard) ---- */
+main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,calc((100% - 1280px)/2))}
+.pn-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;align-items:end}
+.pn-bar .f label{font-size:12.5px}
+.pn-bar .f select,.pn-bar .f input{min-width:0;width:100%}
+.pn-bar .busca{grid-column:1/-1}
+@media(min-width:900px){.pn-bar .busca{grid-column:span 2}}
+.pn-bar .f select,.pn-bar .f input{min-height:42px;padding:8px 10px;font-size:15px}
+.pn-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.pn-acts .grow{flex:1;min-width:140px;font-size:12.5px;color:var(--muted)}
+.pn-sum{margin:12px 0 0;font-size:14px}
+.pn-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:14px 0 4px}
+.pn-kpi{padding:14px}
+.pn-kpi .k{font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em}
+.pn-kpi .v{font-family:var(--font-d);font-size:32px;font-weight:700;line-height:1.1;margin-top:4px}
+.pn-kpi .v small{font-size:14px;font-family:var(--font-b);color:var(--muted);font-weight:600}
+.pn-kpi .s{font-size:12.5px;color:var(--muted);margin-top:2px}
+.pn-kpi .v.pos{color:var(--ok)} .pn-kpi .v.neg{color:var(--bad)}
+.pn-2{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){.pn-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.hb{margin-bottom:11px}
+.hb .hl{display:flex;justify-content:space-between;gap:8px;font-size:13.5px}
+.hb .hl b{font-family:var(--font-d);font-size:16px;white-space:nowrap}
+.hb .ht{height:12px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;display:flex;margin-top:4px}
+.hb .ht i{display:block;height:100%}
+.hb .hs{font-size:12px;color:var(--muted);margin-top:3px}
+.pc0{background:var(--mob)} .pc1{background:var(--accent)} .pc2{background:var(--ok)} .pc3{background:var(--muted)}
+.pn-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pn-scroll .chart{min-width:100%}
+.tbl td.r,.tbl th.r{text-align:right;white-space:nowrap}
+.tbl td.nw{white-space:nowrap}
+.tbl tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.tbl .neg{color:var(--bad)} .tbl .pos{color:var(--ok)}
+.pn-empty{text-align:center;padding:24px}
+.pn-seg{display:flex;gap:6px;margin-left:auto}
 </style>
 </head>
 <body>
@@ -230,6 +266,7 @@ textarea.exp{width:100%;min-height:180px;font-family:ui-monospace,Menlo,Consolas
 <div id="layer"></div>
 <div id="toast-host"></div>
 
+<script src="painel-calc.js"></script>
 <script>
 (function(){
 'use strict';
@@ -302,12 +339,18 @@ function userPodeGerenciarUsuarios(u){
  return u.pode_gerenciar_usuarios === true || u.pode_gerenciar_usuarios === 'true' || u.pode_gerenciar_usuarios === 1;
 }
 
+function userPodeVerPainel(u){
+ if(!u) return false;
+ if(u.login==='admin' || u.role==='admin') return true;
+ return u.pode_ver_painel === true || u.pode_ver_painel === 'true' || u.pode_ver_painel === 1;
+}
+
 const KGM={'5.0':0.154,'6.3':0.245,'8.0':0.395,'10.0':0.617,'12.5':0.963,'16.0':1.578,'20.0':2.466,'25.0':3.853,'32.0':6.313,'40.0':9.865};
 const ACOS=['CA-50S','CA-60','CA-25'];
 const ELEM=['PILAR','BLOCO','SAPATA','ESTACA','VIGA','LAJE','TRAVESSA','ENCONTRO','CORTINA','LONGARINA','TRANSVERSINA'];
 const OPS={
-  ret:{label:'Retirada',pre:'RET',desc:'Aço sai do pátio com transportador identificado.',destL:'Destino da retirada',destP:'ex.: Frente P2, Canteiro Norte',autL:'Autorizado por',autP:'Nome de quem autorizou'},
-  mob:{label:'Entrada',pre:'ENT',desc:'Material recebido no pátio com o transportador identificado.',destL:'Origem / procedência',destP:'ex.: Fornecedor, NF 12345, outro pátio',autL:'Conferido por',autP:'Nome de quem conferiu o recebimento'}
+  ret:{label:'Retirada',pre:'RET',desc:'Aço sai do pátio com transportador identificado.',destL:'Nome da Rua',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Autorizado por',autP:'Nome de quem autorizou'},
+  mob:{label:'Entrada',pre:'ENT',desc:'Material recebido no pátio com o transportador identificado.',destL:'Nome da Rua',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Conferido por',autP:'Nome de quem conferiu o recebimento'}
 };
 const PATIOS=['Marabá','São Félix'];
 const CODIGOS=['CPT','CTP','CPM','DF'];
@@ -439,7 +482,7 @@ function validate(){
  }
  if(!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(f.placa||'')) add('placa','Placa inválida. Use o formato ABC1D23 ou ABC1234');
  if(!(f.motorista||'').trim()) add('motorista','Informe o nome do motorista');
- if(!(f.destino||'').trim()) add('destino','Informe '+OPS[S.op].destL.toLowerCase());
+ if(!(f.destino||'').trim()) add('destino','Informe o nome da rua');
  if(!(f.autorizador||'').trim()) add('autorizador','Informe '+OPS[S.op].autL.toLowerCase());
  const ctrl=Auth.user?Auth.user.nome:(f.controlador||'').trim();
  if(!ctrl) add('controlador','Informe o nome do controlador');
@@ -448,6 +491,7 @@ function validate(){
 
 /* ============ renderização ============ */
 const view=$('#view');
+function topo(){try{view.scrollTop=0;}catch(e){}window.scrollTo(0,0);}
 
 function renderTabs(){
  const topIn=$('#top-in')||$('.top-in');
@@ -474,7 +518,8 @@ function renderTabs(){
  $('#user-display').style.display='inline-flex';
  $('#user-display').textContent=Auth.user.nome.split(' ')[0];
 
- const t=[['novo','plus','Registrar'],['hist','list','Histórico'],['painel','chart','Painel']];
+ const t=[['novo','plus','Registrar'],['hist','list','Histórico']];
+ if(userPodeVerPainel(Auth.user)) t.push(['painel','chart','Painel']);
  if(userPodeGerenciarUsuarios(Auth.user)){
   t.push(['usuarios','users','Usuários']);
  }
@@ -505,6 +550,12 @@ function render(){
   carregarListaUsuarios();
   return;
  }
+ if(S.tab==='painel'&&!userPodeVerPainel(Auth.user)){
+  S.tab='novo';
+  render();
+  return;
+ }
+ view.classList.toggle('wide',S.tab==='painel');
  view.innerHTML=S.tab==='novo'?(S.done?vDone():S.op?vForm():vOps()):S.tab==='hist'?vHist():vPanel();
  const st=!DB.ok?'<div class="note mt">O armazenamento do navegador não está disponível. Os registros ficam apenas nesta sessão.</div>':'';
  if(st&&S.tab!=='novo') view.insertAdjacentHTML('beforeend',st);
@@ -597,7 +648,7 @@ async function doMudarSenha(){
   resetForm();
   toast('Senha alterada com sucesso!');
   render();
-  window.scrollTo(0,0);
+  topo();
   sincronizarRegistrosComBanco();
  }catch(e){
   errEl.textContent='Erro ao conectar ao servidor.';
@@ -628,6 +679,13 @@ function vUsuarios(){
  '<span>Permitir gerenciar usuários (acessar esta tela, cadastrar e resetar senhas)</span>'+
  '</label>'+
  '<div class="hint">Se marcado, o usuário terá permissão administrativa para criar outros operadores e resetar senhas.</div>'+
+ '</div>'+
+ '<div class="f full" id="wrap-u-painel" style="margin-top:6px">'+
+ '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600">'+
+ '<input type="checkbox" id="u-pode-painel" style="width:20px;height:20px;cursor:pointer">'+
+ '<span>Permitir acesso ao Painel (indicadores e gráficos)</span>'+
+ '</label>'+
+ '<div class="hint">Se desmarcado, o operador não vê o menu Painel nem consegue consultar os dados consolidados.</div>'+
  '</div>'+
  '</div>'+
  '<div class="row mt" id="cad-user-actions">'+
@@ -668,7 +726,7 @@ async function doLogin(){
   S.form.controlador=data.usuario.nome;
   toast('Bem-vindo, '+data.usuario.nome+'!');
   render();
-  window.scrollTo(0,0);
+  topo();
   sincronizarRegistrosComBanco();
  }catch(e){
   errEl.textContent='Não foi possível conectar ao servidor.';
@@ -694,6 +752,7 @@ async function carregarListaUsuarios(){
    const isAdmin=u.role==='admin'||isMaster;
    const podeExcluir=!!u.pode_excluir||isAdmin;
    const podeGerenciar=!!u.pode_gerenciar_usuarios||isAdmin;
+   const podePainel=!!u.pode_ver_painel||isAdmin;
 
    const badgeMaster=isMaster
     ? '<span class="pill" style="background:#0e1a2b;color:#f2a900;font-size:11px;font-weight:700">MASTER</span>'
@@ -707,11 +766,14 @@ async function carregarListaUsuarios(){
    const badgeGerenciar=podeGerenciar
     ? '<span class="pill mob" style="font-size:11px">Gestor</span>'
     : '';
+   const badgePainel=podePainel
+    ? '<span class="pill mob" style="font-size:11px">Painel</span>'
+    : '<span class="pill" style="font-size:11px;background:var(--surface2);color:var(--muted)">Sem Painel</span>';
 
    return '<div class="card pad" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
     '<div><div style="font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px">'+esc(u.nome)+(isEu?' <small class="autotag">Você</small>':'')+badgeMaster+'</div>'+
     '<div class="muted" style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">'+
-    '<span>Login: <b>'+esc(u.login)+'</b></span> · '+badgePerfil+' '+badgeExcluir+(badgeGerenciar?' · '+badgeGerenciar:'')+
+    '<span>Login: <b>'+esc(u.login)+'</b></span> · '+badgePerfil+' '+badgeExcluir+(badgeGerenciar?' · '+badgeGerenciar:'')+' · '+badgePainel+
     (u.trocar_senha?' · <span style="color:var(--bad);font-weight:600">Aguardando troca de senha</span>':'')+
     '</div></div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
@@ -719,6 +781,7 @@ async function carregarListaUsuarios(){
     '<button class="btn sm" data-act="resetpwd" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">Resetar Senha</button>'+
     (!isMaster?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar Exclusão':'Permitir Exclusão')+'</button>':'')+
     (!isMaster?'<button class="btn sm" data-act="togglemanage" data-id="'+u.id+'" data-pode="'+(u.pode_gerenciar_usuarios?0:1)+'">'+(u.pode_gerenciar_usuarios?'Revogar Gestão':'Permitir Gestão')+'</button>':'')+
+    (!isAdmin?'<button class="btn sm" data-act="togglepainel" data-id="'+u.id+'" data-pode="'+(u.pode_ver_painel?0:1)+'">'+(u.pode_ver_painel?'Revogar Painel':'Permitir Painel')+'</button>':'')+
     (!isEu&&!isMaster?'<button class="btn danger sm" data-act="deluser" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">'+ic('trash')+'Excluir</button>':'')+
     '</div></div>';
   }).join('');
@@ -735,6 +798,7 @@ async function cadastrarUsuario(){
  const senha=$('#u-senha')?$('#u-senha').value:'';
  const pode_excluir=!!($('#u-pode-excluir')&&$('#u-pode-excluir').checked);
  const pode_gerenciar_usuarios=!!($('#u-pode-gerenciar')&&$('#u-pode-gerenciar').checked);
+ const pode_ver_painel=!!($('#u-pode-painel')&&$('#u-pode-painel').checked);
  if(!nome||!login||!senha){toast('Preencha todos os campos.');return;}
 
  cadUserBusy=true;
@@ -745,7 +809,7 @@ async function cadastrarUsuario(){
   const res=await fetch('/api/usuarios',{
    method:'POST',
    headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
-   body:JSON.stringify({nome,login,senha,pode_excluir,pode_gerenciar_usuarios})
+   body:JSON.stringify({nome,login,senha,pode_excluir,pode_gerenciar_usuarios,pode_ver_painel})
   });
   const data=await res.json();
   if(!res.ok||!data.ok){toast(data.erro||'Erro ao criar usuário.');return;}
@@ -755,6 +819,7 @@ async function cadastrarUsuario(){
   if($('#u-senha')) $('#u-senha').value='';
   if($('#u-pode-excluir')) $('#u-pode-excluir').checked=false;
   if($('#u-pode-gerenciar')) $('#u-pode-gerenciar').checked=false;
+  if($('#u-pode-painel')) $('#u-pode-painel').checked=false;
   carregarListaUsuarios();
  }catch(e){
   toast('Erro ao conectar ao servidor.');
@@ -831,6 +896,12 @@ function fld(o){
  else if(o.area) inner='<textarea id="f-'+o.k+'" data-k="'+o.k+'" placeholder="'+esc(o.ph||'')+'">'+esc(v)+'</textarea>';
  else inner='<input id="f-'+o.k+'" data-k="'+o.k+'" type="'+(o.type||'text')+'" '+(o.im?'inputmode="'+o.im+'" ':'')+(o.list?'list="'+o.list+'" ':'')+(o.cls?'class="'+o.cls+'" ':'')+'value="'+esc(v)+'" placeholder="'+esc(o.ph||'')+'" autocomplete="off"'+(o.max?' maxlength="'+o.max+'"':'')+(o.cap?' autocapitalize="characters"':'')+'>';
  return '<div class="f'+(o.full?' full':'')+(er?' err':'')+(S.auto[o.k]?' auto':'')+'"><label for="f-'+o.k+'">'+esc(o.l)+(o.req?' <span class="rq">*</span>':'')+(S.auto[o.k]?' <span class="autotag">lido da foto</span>':'')+'</label>'+inner+(o.hint?'<div class="hint">'+esc(o.hint)+'</div>':'')+(er?'<div class="em">'+esc(er)+'</div>':'')+'</div>';
+}
+
+function ruasDatalist(){
+ const vistos={};
+ S.records.forEach(r=>{const n=PainelCalc.ruaPadrao(r.destino);if(n&&n!=='(sem local)')vistos[n]=1;});
+ return '<datalist id="dl-ruas">'+Object.keys(vistos).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>'<option value="'+esc(n)+'"></option>').join('')+'</datalist>';
 }
 
 function numBR(x){
@@ -910,8 +981,8 @@ function vForm(){
   fld({k:'empresa',l:'Empresa / transportadora',ph:'Preenchimento manual ou do crachá'})+
   fld({k:'cracha',l:'Nº do documento / crachá',ph:'Nº CNH, RG ou matrícula'})+
   '</div></div>'+
- '<h2 class="sec"><span class="n">5</span>Destino e responsável</h2><div class="card pad"><div class="grid">'+
-  fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP})+
+ '<h2 class="sec"><span class="n">5</span>Nome da Rua e responsável</h2><div class="card pad"><div class="grid">'+
+  fld({k:'destino',l:o.destL,req:1,full:1,ph:o.destP,list:'dl-ruas',hint:'Escolha uma sugestão da lista para manter o mesmo nome em todos os registros.'})+ruasDatalist()+
   fld({k:'autorizador',l:o.autL,req:1,ph:o.autP})+
   fld({k:'controlador',l:'Controlador',req:1,ph:'Seu nome'})+
   fld({k:'obs',l:'Observações',area:1,full:1,ph:'Avarias, divergências, ressalvas'})+
@@ -968,27 +1039,233 @@ function vHist(){
   '<div class="card empty" style="text-align:center;padding:24px"><div class="ei" style="margin-bottom:8px">'+ic('list')+'</div><b>'+(S.records.length?'Nenhum registro com esses filtros':'Nenhum registro encontrado')+'</b><div style="margin-top:4px" class="muted">'+(S.records.length?'Troque o período, o pátio ou limpe a busca.':'Os registros cadastrados no pátio aparecerão aqui.')+'</div></div>');
 }
 
+/* ============ Painel (dashboard dinâmico) ============ */
+const PX={vis:'geral',linhas:[],ok:false,carregando:false,erro:'',origem:'',gerado:null,janela:7,timer:null,
+ f:{campo:'Todos os campos',busca:'',patio:'Todos os pátios',operacao:'Todas',produto:'Todos',periodo:'Todo o período',de:'',ate:''}};
+const PCOR={'Aço pronto':'pc0','Barra reta':'pc1','Cordoalha':'pc2'};
+function pnPadrao(){return {campo:'Todos os campos',busca:'',patio:'Todos os pátios',operacao:'Todas',produto:'Todos',periodo:'Todo o período',de:'',ate:''};}
+// Apaga da memória os dados consolidados e os filtros (ao sair da conta ou perder a sessão)
+function pnReset(){
+ clearTimeout(PX.timer);clearTimeout(AX.timer);
+ PX.linhas=[];PX.ok=false;PX.carregando=false;PX.erro='';PX.origem='';PX.gerado=null;PX.vis='geral';PX.janela=7;
+ PX.f=pnPadrao();AX.f=acPadrao();AX.janela=7;
+}
+function pnCalcular(){return PainelCalc.painel(PX.linhas,PX.f,new Date(),{janela:PX.janela});}
+
+async function pnCarregar(){
+ if(PX.carregando)return;
+ PX.carregando=true;PX.erro='';
+ if(S.tab==='painel')render();
+ try{
+  const res=await fetch('/api/painel/base',{headers:{'authorization':'Bearer '+Auth.token}});
+  if(res.status===401){Auth.clear();pnReset();render();return;}
+  if(res.status===403){PX.linhas=[];PX.ok=false;PX.erro='Você não tem permissão para acessar o Painel.';}
+  else if(!res.ok)throw new Error('http '+res.status);
+  else{
+   const d=await res.json();
+   PX.linhas=PainelCalc.normalizar(d.registros||[]);PX.ok=true;PX.origem='servidor';PX.gerado=d.geradoEm||new Date().toISOString();
+  }
+ }catch(e){
+  // sem conexão com o servidor: usa o que já está neste aparelho
+  PX.linhas=PainelCalc.normalizar(S.records);PX.ok=S.records.length>0;PX.origem='local';PX.gerado=new Date().toISOString();
+  if(!PX.ok)PX.erro='Sem conexão com o servidor e sem dados salvos neste aparelho.';
+ }
+ PX.carregando=false;
+ if(!Auth.token){pnReset();return;} // saiu da conta enquanto carregava
+ if(S.tab==='painel')render();
+}
+function pnRender(){const b=$('#pn-body');if(b)b.innerHTML=pnBody(pnCalcular());}
+
+function pnSel(k,lab,lista,val){
+ return '<div class="f"><label for="pf-'+k+'">'+lab+'</label><select id="pf-'+k+'" data-pf="'+k+'">'+lista.map(x=>'<option value="'+esc(x)+'"'+(String(x)===String(val)?' selected':'')+'>'+esc(x)+'</option>').join('')+'</select></div>';
+}
+function pnBarra(R){
+ const f=PX.f,o=R.opcoes,custom=!!(f.de||f.ate);
+ const per=o.periodos.concat(custom?['Personalizado']:[]);
+ return '<div class="card pad"><div class="pn-bar">'+
+  '<div class="f busca"><label for="pf-busca">Buscar</label><input id="pf-busca" data-pf="busca" type="search" value="'+esc(f.busca)+'" placeholder="Texto parcial: placa, nome, OS, corrida, lote, NF, data 07/11/2026…" autocomplete="off"></div>'+
+  pnSel('campo','Buscar em',o.campos,f.campo)+
+  pnSel('patio','Pátio',o.patios,f.patio)+
+  pnSel('operacao','Operação',o.operacoes,f.operacao)+
+  pnSel('produto','Produto',o.produtos,f.produto)+
+  pnSel('periodo','Período',per,custom?'Personalizado':f.periodo)+
+  '<div class="f"><label for="pf-de">De (opcional)</label><input id="pf-de" data-pf="de" type="date" value="'+esc(f.de)+'"></div>'+
+  '<div class="f"><label for="pf-ate">Até (opcional)</label><input id="pf-ate" data-pf="ate" type="date" value="'+esc(f.ate)+'"></div>'+
+  '</div><div class="pn-acts"><button class="btn sm" data-act="pn-limpar">Limpar filtros</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
+  '<span class="grow">'+(PX.gerado?(PX.origem==='local'?'Dados salvos neste aparelho (sem conexão) · ':'Dados do banco · ')+'atualizado às '+new Date(PX.gerado).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+' · '+R.totalBase+' registros na base':'')+'</span></div></div>';
+}
+function hbar(rot,val,max,seg,sub){
+ const w=max>0?Math.max(val>0?1.5:0,val/max*100):0;
+ return '<div class="hb"><div class="hl"><span>'+rot+'</span><b>'+nf(val,2)+' t</b></div><div class="ht">'+(seg||'<i class="pc0" style="width:'+w+'%"></i>')+'</div>'+(sub?'<div class="hs">'+sub+'</div>':'')+'</div>';
+}
+function pnSaldoCls(v){return v>0.0005?'pos':v<-0.0005?'neg':'';}
+function pnBody(R){
+ if(PX.carregando&&!PX.linhas.length)return '<div class="note mt">Carregando dados do banco…</div>';
+ if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
+ if(!R.totalBase)return '<div class="card empty pn-empty mt"><div class="ei" style="margin-bottom:8px">'+ic('chart')+'</div><b>Nenhum registro na base</b><div class="muted" style="margin-top:4px">Os indicadores aparecem assim que houver registros.</div></div>';
+ const k=R.kpis,f=PX.f,j=R.janela;
+ const resumo='<b>'+nf(k.registros,0)+'</b> '+(k.registros===1?'registro':'registros')+' · <b>'+nf(k.pesoT,2)+' t</b> · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
+ const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
+ const kpis='<div class="pn-kpis">'+
+  kp('Registros',nf(k.registros,0),'Placas: '+k.placas+' · Motoristas: '+k.motoristas)+
+  kp('Entradas',nf(k.entradas,0),nf(k.pesoEntT,2)+' t recebidas')+
+  kp('Retiradas',nf(k.retiradas,0),nf(k.pesoRetT,2)+' t retiradas')+
+  kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro')+
+  kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' metros')+
+  kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>','Entradas − Retiradas',pnSaldoCls(k.saldoT))+'</div>';
+ if(!k.registros)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhum registro com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
+
+ // peso por dia (retirada x entrada)
+ const dias=diasHtml(R.serie,PX.janela,'pn-janela','Peso movimentado nos 7 dias até a data final (t)','Peso movimentado por dia no período (t)');
+
+ // por pátio
+ const mp=Math.max(0.0001,...R.porPatio.map(p=>p.t));
+ const patio='<div><h2 class="sec">Peso por pátio (t)</h2><div class="card pad">'+R.porPatio.map(p=>hbar(esc(p.patio),p.t,mp,null,nf(p.registros,0)+' registros · Entradas '+nf(p.entT,2)+' t · Retiradas '+nf(p.retT,2)+' t · Saldo <b class="'+pnSaldoCls(p.saldoT)+'">'+nf(p.saldoT,2)+' t</b>')).join('')+'</div></div>';
+
+ // por controlador
+ const mc=Math.max(0.0001,...R.porControlador.map(c=>c.t));
+ const ctl='<div><h2 class="sec">Peso por controlador (t)</h2><div class="card pad">'+(R.porControlador.length?R.porControlador.map(c=>hbar('<span title="'+esc(c.nome)+'">'+esc(c.rotulo)+'</span>',c.t,mc,null,nf(c.registros,0)+' registros')).join(''):'<div class="muted">Sem controlador informado.</div>')+'</div></div>';
+
+ // por bitola e produto (empilhado)
+ const linhasB=R.porBitola.filter(b=>b.lotes>0);
+ const mb=Math.max(0.0001,...linhasB.map(b=>b.t));
+ const bit='<div><h2 class="sec">Peso por bitola e produto (t)</h2><div class="card pad">'+linhasB.map(b=>hbar(esc(b.rotulo),b.t,mb,R.produtos.map(p=>'<i class="'+(PCOR[p]||'pc3')+'" style="width:'+(b.produtos[p]/mb*100)+'%" title="'+esc(p)+': '+nf(b.produtos[p],2)+' t"></i>').join(''),R.produtos.filter(p=>b.produtos[p]>0).map(p=>esc(p)+' '+nf(b.produtos[p],2)+' t').join(' · '))).join('')+
+  '<div class="legend">'+R.produtos.map(p=>'<span><i class="'+(PCOR[p]||'pc3')+'"></i>'+esc(p)+'</span>').join('')+'</div></div></div>';
+
+ // tabela por bitola
+ const th=R.produtos.map(p=>'<th class="r">'+esc(p)+' (t)</th>').join('');
+ const trB=linhasB.concat([R.totalBitola]).map((b,i,a)=>'<tr'+(i===a.length-1?' class="tot"':'')+'><td class="nw"><b>'+esc(b.rotulo)+'</b></td><td class="r">'+nf(b.lotes,0)+'</td><td class="r">'+nf(b.barras,0)+'</td><td class="r">'+nf(b.metros,0)+'</td>'+R.produtos.map(p=>'<td class="r">'+nf(b.produtos[p],2)+'</td>').join('')+'<td class="r"><b>'+nf(b.t,2)+'</b></td></tr>').join('');
+ const tabB='<h2 class="sec">Peso por produto e bitola (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Bitola</th><th class="r">Registros</th><th class="r">Unid. (barras)</th><th class="r">Metros</th>'+th+'<th class="r">Peso (t)</th></tr></thead><tbody>'+trB+'</tbody></table></div>';
+
+ // últimos registros
+ const tr=R.ultimos.map(u=>'<tr><td><span class="pill '+(u.operacao==='Retirada'?'ret':'mob')+'">'+esc(u.operacao)+'</span></td><td class="nw"><b>'+esc(u.placa)+'</b></td><td class="nw">'+esc(u.data)+'</td><td>'+esc(u.hora)+'</td><td class="nw">'+esc(u.patio)+'</td><td class="nw">'+esc(u.produto)+'</td><td class="r">'+(u.bitola==null?'':nf(u.bitola,u.bitola%1?1:0))+'</td><td class="r">'+(u.produto==='Cordoalha'?'':nf(u.barras,0))+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.motorista)+'</td><td class="nw">'+esc(u.controlador)+'</td><td>'+esc(u.rua)+'</td></tr>').join('');
+ const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Nome da Rua</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
+
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+ult+
+  '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.</div>';
+}
+function diasHtml(serie,janela,act,t7,tp){
+ const mx=Math.max(0.0001,...serie.map(d=>Math.max(d.ret,d.ent))),lab=serie.length<=14,larg=serie.length>14?30:0;
+ const bars=serie.map(d=>'<div class="day" title="'+d.rotulo+' · Retirada '+nf(d.ret,2)+' t · Entrada '+nf(d.ent,2)+' t" style="min-width:'+larg+'px"><div class="bars">'+[['ret',d.ret],['mob',d.ent]].map(([c,v])=>'<div class="b '+c+'" style="height:'+(v?Math.max(3,v/mx*100):0)+'%">'+(v&&lab?'<span>'+nf(v,1)+'</span>':'')+'</div>').join('')+'</div></div>').join('');
+ const xl=serie.map(d=>'<div style="min-width:'+larg+'px;flex:1">'+d.rotulo.slice(0,5)+'</div>').join('');
+ return '<h2 class="sec">'+(janela==='periodo'?tp:t7)+
+  '<span class="pn-seg"><button class="chip" data-act="'+act+'" data-j="7" aria-pressed="'+(janela===7)+'">7 dias</button><button class="chip" data-act="'+act+'" data-j="periodo" aria-pressed="'+(janela==='periodo')+'">Todo o período</button></span></h2>'+
+  '<div class="card pad"><div class="pn-scroll"><div style="min-width:'+(larg?serie.length*larg:0)+'px"><div class="chart" role="img" aria-label="Peso por dia, retirada e entrada">'+bars+'</div><div class="xl">'+xl+'</div></div></div>'+
+  '<div class="legend"><span><i style="background:var(--ret)"></i>Retirada</span><span><i style="background:var(--mob)"></i>Entrada</span></div></div>';
+}
+function selHtml(attr,k,lab,lista,val){
+ return '<div class="f"><label for="'+attr+'-'+k+'">'+lab+'</label><select id="'+attr+'-'+k+'" data-'+attr+'="'+k+'">'+lista.map(x=>{const v=Array.isArray(x)?x[0]:x,t=Array.isArray(x)?x[1]:x;return '<option value="'+esc(v)+'"'+(String(v)===String(val)?' selected':'')+'>'+esc(t)+'</option>';}).join('')+'</select></div>';
+}
+function pillOp(o){return '<span class="pill '+(o==='Retirada'?'ret':'mob')+'">'+esc(o)+'</span>';}
+function sinal(v,d){return '<span class="'+pnSaldoCls(v)+'">'+(v>0.0005?'+':'')+nf(v,d)+'</span>';}
+
+/* ---- Visão Aço pronto ---- */
+function acPadrao(){return {campo:'Todos os campos',busca:'',patio:'Todos os pátios',operacao:'Todas',elemento:'Todos',desenho:'Todos',cpt:'Todos',bitola:'Todas',local:'Todos',periodo:'Todo o período',de:'',ate:''};}
+const AX={janela:7,timer:null,f:acPadrao()};
+function acCalcular(){return PainelCalc.acoPronto(PX.linhas,AX.f,new Date(),{janela:AX.janela});}
+function acRender(){const b=$('#ac-body');if(b)b.innerHTML=acBody(acCalcular());}
+function acBarra(R){
+ const f=AX.f,o=R.opcoes,custom=!!(f.de||f.ate);
+ const per=o.periodos.concat(custom?['Personalizado']:[]);
+ const bit=o.bitolas.map(b=>b==='Todas'?'Todas':[String(b),PainelCalc.fmtNum(b)+' mm']);
+ return '<div class="card pad"><div class="pn-bar">'+
+  '<div class="f busca"><label for="af-busca">Buscar</label><input id="af-busca" data-af="busca" type="search" value="'+esc(f.busca)+'" placeholder="Texto parcial: desenho, posição, CJ, etiqueta, OS, observação…" autocomplete="off"></div>'+
+  selHtml('af','campo','Buscar em',o.campos,f.campo)+
+  selHtml('af','local','Nome da Rua',o.locais,f.local)+
+  selHtml('af','patio','Pátio',o.patios,f.patio)+
+  selHtml('af','operacao','Operação',o.operacoes,f.operacao)+
+  selHtml('af','elemento','Elemento',o.elementos,f.elemento)+
+  selHtml('af','desenho','Desenho',o.desenhos,f.desenho)+
+  selHtml('af','cpt','CPT / CPM / DF',o.cpts,f.cpt)+
+  selHtml('af','bitola','Bitola (mm)',bit,f.bitola)+
+  selHtml('af','periodo','Período',per,custom?'Personalizado':f.periodo)+
+  '<div class="f"><label for="af-de">De (opcional)</label><input id="af-de" data-af="de" type="date" value="'+esc(f.de)+'"></div>'+
+  '<div class="f"><label for="af-ate">Até (opcional)</label><input id="af-ate" data-af="ate" type="date" value="'+esc(f.ate)+'"></div>'+
+  '</div><div class="pn-acts"><button class="btn sm" data-act="ac-limpar">Limpar filtros</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
+  '<span class="grow">'+(PX.gerado?(PX.origem==='local'?'Dados salvos neste aparelho (sem conexão) · ':'Dados do banco · ')+'atualizado às '+new Date(PX.gerado).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+' · '+R.totalAcoPronto+' etiquetas de aço pronto na base':'')+'</span></div></div>';
+}
+function acBody(R){
+ if(PX.carregando&&!PX.linhas.length)return '<div class="note mt">Carregando dados do banco…</div>';
+ if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
+ if(!R.totalAcoPronto)return '<div class="card empty pn-empty mt"><div class="ei" style="margin-bottom:8px">'+ic('tag')+'</div><b>Nenhuma etiqueta de aço pronto na base</b><div class="muted" style="margin-top:4px">Esta visão mostra somente o produto Aço pronto.</div></div>';
+ const k=R.kpis,f=AX.f,j=R.janela;
+ const resumo='Somente produto Aço pronto · <b>'+nf(k.etiquetas,0)+'</b> '+(k.etiquetas===1?'etiqueta':'etiquetas')+' · <b>'+nf(k.pesoT,2)+' t</b> · <b>'+nf(k.desenhos,0)+'</b> '+(k.desenhos===1?'desenho':'desenhos')+' · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
+ const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
+ const kpis='<div class="pn-kpis">'+
+  kp('Etiquetas',nf(k.etiquetas,0),'Entradas: '+nf(k.entradas,0)+' · Retiradas: '+nf(k.retiradas,0))+
+  kp('Peso','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / etiqueta')+
+  kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' m · comp. médio '+nf(k.compMedio,0)+' cm')+
+  kp('Desenhos',nf(k.desenhos,0),nf(k.posicoes,0)+' posições (desenho + posição)')+
+  kp('Ordens (OS)',nf(k.os,0),nf(k.cj,0)+' conjuntos (CJ)')+
+  kp('Elementos',nf(k.elementos,0),'Maior peso: '+esc(k.maiorElemento))+
+  kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',nf(k.saldoBarras,0)+' barras · '+nf(k.saldoEtiquetas,0)+' etiquetas (entradas − retiradas)',pnSaldoCls(k.saldoT))+'</div>';
+ if(!k.etiquetas)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhuma etiqueta com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
+
+ // onde está o aço (Operação | Pátio | Nome da Rua)
+ const trO=R.onde.map(o=>'<tr><td>'+pillOp(o.operacao)+'</td><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.etiquetas,0)+'</td><td class="r">'+nf(o.desenhos,0)+'</td><td class="r">'+nf(o.barras,0)+'</td><td class="r"><b>'+nf(o.t,2)+'</b></td><td class="r">'+nf(o.pct*100,1)+'%</td><td class="nw">'+esc(o.ultimaTxt)+'</td><td style="min-width:200px">'+esc(o.principais)+'</td></tr>').join('');
+ const onde='<h2 class="sec">Onde está o aço pronto — por pátio e nome da rua (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Pátio</th><th>Nome da Rua</th><th class="r">Etiquetas</th><th class="r">Desenhos</th><th class="r">Barras</th><th class="r">Peso (t)</th><th class="r">% peso</th><th>Última mov.</th><th>Principais desenhos (maior peso primeiro)</th></tr></thead><tbody>'+trO+'</tbody></table></div>';
+
+ // saldo por pátio e nome da rua
+ const sl=R.saldoLocal,sT=(a)=>sl.reduce((x,o)=>x+o[a],0);
+ const trS=sl.map(o=>'<tr><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.entEtiquetas,0)+'</td><td class="r">'+nf(o.retEtiquetas,0)+'</td><td class="r">'+nf(o.entBarras,0)+'</td><td class="r">'+nf(o.retBarras,0)+'</td><td class="r">'+nf(o.entT,2)+'</td><td class="r">'+nf(o.retT,2)+'</td><td class="r"><b>'+sinal(o.saldoBarras,0)+'</b></td><td class="r"><b>'+sinal(o.saldoT,2)+'</b></td></tr>').join('')+
+  '<tr class="tot"><td colspan="2">Total</td><td class="r">'+nf(sT('entEtiquetas'),0)+'</td><td class="r">'+nf(sT('retEtiquetas'),0)+'</td><td class="r">'+nf(sT('entBarras'),0)+'</td><td class="r">'+nf(sT('retBarras'),0)+'</td><td class="r">'+nf(sT('entT'),2)+'</td><td class="r">'+nf(sT('retT'),2)+'</td><td class="r">'+sinal(sT('saldoBarras'),0)+'</td><td class="r">'+sinal(sT('saldoT'),2)+'</td></tr>';
+ const saldo='<h2 class="sec">Saldo por pátio e nome da rua — entradas − retiradas</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Pátio</th><th>Nome da Rua</th><th class="r">Etiq. entrada</th><th class="r">Etiq. retirada</th><th class="r">Barras entrada</th><th class="r">Barras retirada</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo barras</th><th class="r">Saldo (t)</th></tr></thead><tbody>'+trS+'</tbody></table></div>';
+
+ // gráficos
+ const mE=Math.max(0.0001,...R.topElementos.map(e=>e.t)),mD=Math.max(0.0001,...R.topDesenhos.map(e=>e.t)),mB=Math.max(0.0001,...R.porBitola.map(e=>e.t));
+ const subSaldo=e=>nf(e.etiquetas,0)+' etiquetas · '+nf(e.barras,0)+' barras · Saldo <b class="'+pnSaldoCls(e.saldoT)+'">'+nf(e.saldoT,2)+' t</b>';
+ const gEl='<div><h2 class="sec">Peso por elemento (t) — top 8</h2><div class="card pad">'+R.topElementos.map(e=>hbar(esc(e.rotulo),e.t,mE,null,subSaldo(e))).join('')+'</div></div>';
+ const gDe='<div><h2 class="sec">Top 10 desenhos por peso (t)</h2><div class="card pad">'+(R.topDesenhos.length?R.topDesenhos.map(e=>hbar(esc(e.rotulo),e.t,mD,null,subSaldo(e))).join(''):'<div class="muted">Sem desenho informado.</div>')+'</div></div>';
+ const gBi='<div><h2 class="sec">Peso e barras por bitola</h2><div class="card pad">'+R.porBitola.filter(b=>b.t>0||b.barras>0).map(b=>hbar(esc(b.rotulo),b.t,mB,null,nf(b.barras,0)+' barras · Saldo <b class="'+pnSaldoCls(b.saldoT)+'">'+nf(b.saldoT,2)+' t</b>')).join('')+'</div></div>';
+ const gDi=diasHtml(R.serie,AX.janela,'ac-janela','Aço pronto movimentado nos 7 dias até a data final (t)','Aço pronto movimentado por dia no período (t)');
+
+ // matriz elemento x bitola
+ let mxM=0;R.matriz.forEach(r=>r.celulas.forEach(v=>{if(v>mxM)mxM=v;}));
+ const cel=v=>v>0?'<td class="r" style="background:color-mix(in srgb,var(--mob) '+Math.round(10+v/mxM*55)+'%,transparent)">'+nf(v,2)+'</td>':'<td class="r muted">–</td>';
+ const trM=R.matriz.map(r=>'<tr><td class="nw"><b>'+esc(r.elemento)+'</b></td>'+r.celulas.map(cel).join('')+'<td class="r"><b>'+nf(r.total,2)+'</b></td><td class="r">'+nf(r.pct*100,1)+'%</td></tr>').join('')+
+  '<tr class="tot"><td>Total (8 maiores elementos)</td>'+R.matrizTotais.map(v=>'<td class="r">'+nf(v,2)+'</td>').join('')+'<td class="r">'+nf(R.matrizTotal,2)+'</td><td class="r">100%</td></tr>';
+ const matriz='<h2 class="sec">Matriz elemento × bitola — peso (t)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Elemento</th>'+R.bitolas.map(b=>'<th class="r">'+PainelCalc.fmtNum(b)+' mm</th>').join('')+'<th class="r">Total (t)</th><th class="r">% do peso</th></tr></thead><tbody>'+trM+'</tbody></table><div class="hint muted" style="font-size:12.5px;margin-top:8px">Cada célula mostra o peso (t) do elemento naquela bitola, já com todos os filtros aplicados. Quanto mais azul, maior o peso. Use os filtros de Desenho ou CPT para ver a composição de uma peça específica.</div></div>';
+
+ // resumo por desenho
+ const trD=R.resumoDesenhos.map(r=>'<tr><td class="nw"><b>'+esc(r.desenho)+'</b></td><td class="nw">'+esc(r.cpt)+'</td><td>'+esc(r.elementos)+'</td><td class="r">'+nf(r.nOS,0)+'</td><td class="r">'+nf(r.posicoes,0)+'</td><td class="nw">'+esc(r.bitolas)+'</td><td class="r">'+nf(r.etiquetas,0)+'</td><td class="r">'+nf(r.barras,0)+'</td><td class="r">'+nf(r.metros,0)+'</td><td class="r"><b>'+nf(r.t,2)+'</b></td><td class="r">'+nf(r.pct*100,1)+'%</td><td class="r">'+nf(r.entT,2)+'</td><td class="r">'+nf(r.retT,2)+'</td><td class="r"><b>'+sinal(r.saldoT,2)+'</b></td><td class="r">'+sinal(r.saldoBarras,0)+'</td><td class="nw">'+esc(r.ultimaTxt)+'</td><td style="min-width:200px">'+esc(r.locais)+'</td><td style="min-width:260px">'+esc(r.obs)+'</td></tr>').join('');
+ const sd=R.semDesenho;
+ const resD='<h2 class="sec">Resumo por desenho — top '+R.resumoDesenhos.length+' por peso (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Desenho</th><th>CPT/CPM/DF</th><th>Elemento</th><th class="r">Nº OS</th><th class="r">Posições</th><th>Bitolas (mm)</th><th class="r">Etiquetas</th><th class="r">Barras</th><th class="r">Metros</th><th class="r">Peso (t)</th><th class="r">% peso</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo (t)</th><th class="r">Saldo barras</th><th>Última mov.</th><th>Nome da Rua (pátio · rua)</th><th>Ordens de produção · observação</th></tr></thead><tbody>'+trD+'</tbody></table>'+
+  (sd.etiquetas?'<div class="hint muted" style="font-size:12.5px;margin-top:8px">'+nf(sd.etiquetas,0)+' etiquetas sem desenho informado ('+nf(sd.t,2)+' t, saldo '+nf(sd.saldoT,2)+' t) não aparecem neste resumo, mas entram nos totais acima.</div>':'')+'</div>';
+
+ // últimas etiquetas
+ const trU=R.ultimas.map(u=>'<tr><td class="nw">'+esc(u.data)+' '+esc(u.hora)+'</td><td class="nw">'+esc(u.os)+'</td><td>'+pillOp(u.operacao)+'</td><td class="nw">'+esc(u.cpt)+'</td><td class="nw"><b>'+esc(u.desenho)+'</b></td><td class="nw">'+esc(u.posicao)+'</td><td class="nw">'+esc(u.cj)+'</td><td class="nw">'+esc(u.elemento)+'</td><td class="r">'+(u.bitola==null?'':PainelCalc.fmtNum(u.bitola))+'</td><td class="r">'+(u.comp==null?'':nf(u.comp,0))+'</td><td class="r">'+nf(u.barras,0)+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.local)+'</td><td style="min-width:200px">'+esc(u.obs)+'</td></tr>').join('');
+ const ult='<h2 class="sec">Últimas '+R.ultimas.length+' etiquetas de aço pronto (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Data / hora</th><th>OS</th><th>Operação</th><th>CPT/CPM/DF</th><th>Desenho</th><th>Posição</th><th>CJ</th><th>Elemento</th><th class="r">Bitola</th><th class="r">Comp. (cm)</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Pátio · Nome da Rua</th><th>Observações</th></tr></thead><tbody>'+trU+'</tbody></table></div>';
+
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
+  '<div class="note mt">Fonte: registros de Aço pronto do sistema (mesmas colunas do Histórico e do CSV). O saldo é a soma das entradas menos as retiradas registradas; ele só reflete a realidade se as retiradas também forem lançadas.</div>';
+}
+function acFiltro(t){
+ const k=t.dataset.af,v=t.value;
+ if(k==='busca'){AX.f.busca=v;clearTimeout(AX.timer);AX.timer=setTimeout(acRender,180);return;}
+ if(k==='periodo'){ if(v!=='Personalizado'){AX.f.periodo=v;AX.f.de='';AX.f.ate='';} }
+ else AX.f[k]=v;
+ render();
+}
+
 function vPanel(){
- const R=S.fp==='all'?S.records:S.records.filter(r=>r.patio===S.fp);
- const today=dkey(new Date()),tr=R.filter(r=>dkey(r.at)===today);
- const sum=a=>a.reduce((s,r)=>s+(r.kg||0),0);
- const days=[];for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d);}
- const data=days.map(d=>{const k=dkey(d),rs=R.filter(r=>dkey(r.at)===k);return {d,ret:sum(rs.filter(r=>r.op==='ret')),mob:sum(rs.filter(r=>r.op==='mob'))};});
- const mx=Math.max(1,...data.map(x=>Math.max(x.ret,x.mob)));
- const bars=data.map(x=>'<div class="day"><div class="bars">'+['ret','mob'].map(k=>'<div class="b '+k+'" style="height:'+(x[k]?Math.max(3,x[k]/mx*100):0)+'%">'+(x[k]?'<span>'+nf(x[k]/1000,1)+'</span>':'')+'</div>').join('')+'</div></div>').join('');
- const xl=data.map(x=>'<div>'+x.d.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','')+'<br>'+String(x.d.getDate()).padStart(2,'0')+'/'+String(x.d.getMonth()+1).padStart(2,'0')+'</div>').join('');
- const by={};R.forEach(r=>{const k=(r.prod==='cord'?'C':r.prod==='barra'?'B':'A')+r.bitola;by[k]=by[k]||{kg:0,n:0,bars:0};by[k].kg+=r.kg||0;by[k].n++;by[k].bars+=r.qtd});
- const tot=sum(R)||1,rows=Object.keys(by).sort((a,b)=>by[b].kg-by[a].kg);
- return patioChips(12)+'<div class="kpis"><div class="card kpi"><div class="k">Registros hoje</div><div class="v">'+tr.length+'</div></div>'+
- '<div class="card kpi"><div class="k">Retiradas</div><div class="v" style="color:var(--ret)">'+tr.filter(r=>r.op==='ret').length+'</div></div>'+
- '<div class="card kpi"><div class="k">Entradas</div><div class="v" style="color:var(--mob)">'+tr.filter(r=>r.op==='mob').length+'</div></div>'+
- '<div class="card kpi"><div class="k">Peso hoje</div><div class="v">'+nf(sum(tr)/1000,2)+' <small>t</small></div></div></div>'+
- '<h2 class="sec">Peso movimentado nos últimos 7 dias (t)</h2><div class="card pad"><div class="chart" role="img" aria-label="Gráfico de barras">'+bars+'</div><div class="xl">'+xl+'</div>'+
- '<div class="legend"><span><i style="background:var(--ret)"></i>Retirada</span><span><i style="background:var(--mob)"></i>Entrada</span></div></div>'+
- '<h2 class="sec">Peso por produto e bitola (todos os registros)</h2><div class="card pad" style="overflow-x:auto">'+(rows.length?'<table class="tbl"><thead><tr><th>Bitola</th><th class="r">Lotes</th><th class="r">Unid.</th><th class="r">Peso (t)</th></tr></thead><tbody>'+
-  rows.map(k=>'<tr><td><b>'+(k[0]==='C'?'Cordoalha ':k[0]==='B'?'Barra reta ':'Aço pronto ')+nf(k.slice(1),1)+' mm</b><div class="mini"><i style="width:'+(by[k].kg/tot*100)+'%"></i></div></td><td class="r">'+by[k].n+'</td><td class="r">'+nf(by[k].bars,0)+'</td><td class="r">'+nf(by[k].kg/1000,2)+'</td></tr>').join('')+
-  '</tbody></table>':'<div class="empty" style="padding:18px">Sem dados ainda.</div>')+'</div>'+
- '<div class="row mt"><button class="btn" data-act="csv-all">'+ic('download')+'Exportar tudo (CSV)</button></div>';
+ if(!PX.ok&&!PX.carregando&&!PX.erro&&!PX.linhas.length&&Auth.token)setTimeout(pnCarregar,0);
+ const aco=PX.vis==='aco';
+ const seg='<div class="seg" style="margin:0 0 12px"><button class="chip" data-act="pn-vis" data-v="geral" aria-pressed="'+(!aco)+'">Painel geral</button><button class="chip" data-act="pn-vis" data-v="aco" aria-pressed="'+aco+'">Aço pronto</button></div>';
+ if(aco){
+  const R=acCalcular();
+  return '<h2 class="sec" style="margin-top:6px"><span class="n">'+ic('tag')+'</span>Aço pronto · desenhos e especificações</h2>'+seg+acBarra(R)+'<div id="ac-body">'+acBody(R)+'</div>';
+ }
+ const R=pnCalcular();
+ return '<h2 class="sec" style="margin-top:6px"><span class="n">'+ic('chart')+'</span>Painel dos pátios</h2>'+seg+pnBarra(R)+'<div id="pn-body">'+pnBody(R)+'</div>';
+}
+function pnFiltro(t){
+ const k=t.dataset.pf,v=t.value;
+ if(k==='busca'){
+  PX.f.busca=v;clearTimeout(PX.timer);PX.timer=setTimeout(pnRender,180);return;
+ }
+ if(k==='periodo'){ if(v!=='Personalizado'){PX.f.periodo=v;PX.f.de='';PX.f.ate='';} }
+ else PX.f[k]=v;
+ render();
 }
 
 /* ============ camadas (modal, lightbox, toast) ============ */
@@ -1044,7 +1321,7 @@ async function saveFile(filename,text,mime){
  }else toast('Download indisponível neste navegador.');
 }
 function csvOf(list){
- const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Destino','Autorizado/Solicitado por','Observações','Nota Fiscal'];
+ const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Nome da Rua','Autorizado/Solicitado por','Observações','Nota Fiscal'];
  const q=v=>{v=v==null?'':String(v);return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
  const rows=list.slice().sort((a,b)=>a.at<b.at?-1:1).map(r=>{const d=new Date(r.at),cord=r.prod==='cord';
   return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data)?'Sim':'Não'].map(q).join(';');});
@@ -1104,7 +1381,7 @@ async function submit(){
   }).catch(()=>{});
  }
 
- S.done=r;resetForm();render();window.scrollTo(0,0);
+ S.done=r;resetForm();render();topo();
 }
 
 async function onCapture(inp){
@@ -1214,11 +1491,18 @@ document.addEventListener('click',async ev=>{
  if(a==='tab'){
   S.tab=t.dataset.tab;
   render();
-  window.scrollTo(0,0);
+  topo();
   if(S.tab==='hist') sincronizarRegistrosComBanco();
+  if(S.tab==='painel') pnCarregar();
   return;
  }
- if(a==='op'){if(!S.patio){toast('Escolha o pátio antes de continuar.');return;}S.op=t.dataset.op;S.done=null;render();window.scrollTo(0,0);return;}
+ if(a==='pn-refresh'){pnCarregar();return;}
+ if(a==='pn-limpar'){PX.f=pnPadrao();render();return;}
+ if(a==='pn-vis'){PX.vis=t.dataset.v==='aco'?'aco':'geral';render();return;}
+ if(a==='ac-limpar'){AX.f=acPadrao();render();return;}
+ if(a==='ac-janela'){AX.janela=t.dataset.j==='periodo'?'periodo':7;render();return;}
+ if(a==='pn-janela'){PX.janela=t.dataset.j==='periodo'?'periodo':7;render();return;}
+ if(a==='op'){if(!S.patio){toast('Escolha o pátio antes de continuar.');return;}S.op=t.dataset.op;S.done=null;render();topo();return;}
  if(a==='patio'){S.patio=t.dataset.p;Cfg.set('patio',S.patio);updateSub();render();return;}
  if(a==='fpatio'){S.fp=t.dataset.p;S.limit=40;render();return;}
  if(a==='range'){const r=t.dataset.r,td=new Date();S.range=r;if(r==='all'){S.from='';S.to='';}else if(r==='today'){S.from=S.to=dkey(td);}else{const f=new Date();f.setDate(f.getDate()-(Number(r)-1));S.from=dkey(f);S.to=dkey(td);}S.limit=40;render();return;}
@@ -1247,8 +1531,8 @@ document.addEventListener('click',async ev=>{
   return;
  }
  if(a==='submit'){submit();return;}
- if(a==='again'){S.done=null;resetForm();render();window.scrollTo(0,0);return;}
- if(a==='gohist'){S.tab='hist';render();window.scrollTo(0,0);sincronizarRegistrosComBanco();return;}
+ if(a==='again'){S.done=null;resetForm();render();topo();return;}
+ if(a==='gohist'){S.tab='hist';render();topo();sincronizarRegistrosComBanco();return;}
  if(a==='filter'){S.filter=t.dataset.f;S.limit=40;render();return;}
  if(a==='more'){S.limit+=40;render();return;}
  if(a==='open'){openRecord(t.dataset.id);return;}
@@ -1427,13 +1711,14 @@ document.addEventListener('click',async ev=>{
   if(await confirmBox('Deseja realmente sair da sua conta?','Sair')){
    fetch('/api/auth/logout',{method:'POST',headers:{'authorization':'Bearer '+Auth.token}}).catch(()=>{});
    Auth.clear();
+   pnReset();
    S.records=[];
    S.tab='novo';
    S.op=null;
    S.done=null;
    resetForm();
    render();
-   window.scrollTo(0,0);
+   topo();
    toast('Você saiu do sistema.');
   }
   return;
@@ -1496,6 +1781,25 @@ document.addEventListener('click',async ev=>{
   }catch(e){toast('Erro de conexão.');}
   return;
  }
+ if(a==='togglepainel'){
+  const id=t.dataset.id;
+  const pode_ver_painel=t.dataset.pode==='1';
+  try{
+   const res=await fetch('/api/usuarios/'+id+'/permissao',{
+    method:'POST',
+    headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},
+    body:JSON.stringify({pode_ver_painel})
+   });
+   const data=await res.json();
+   if(res.ok&&data.ok){
+    toast(pode_ver_painel?'Acesso ao Painel liberado!':'Acesso ao Painel revogado.');
+    carregarListaUsuarios();
+   }else{
+    toast(data.erro||'Erro ao alterar permissão.');
+   }
+  }catch(e){toast('Erro de conexão.');}
+  return;
+ }
  if(a==='deluser'){
   const id=t.dataset.id,nome=t.dataset.nome;
   if(await confirmBox('Excluir o usuário "'+nome+'"?','Excluir Usuário')){
@@ -1520,11 +1824,15 @@ document.addEventListener('submit',ev=>{
 
 document.addEventListener('change',ev=>{
  const t=ev.target;
+ if(t.dataset&&t.dataset.pf){if(t.dataset.pf!=='busca')pnFiltro(t);return;}
+ if(t.dataset&&t.dataset.af){if(t.dataset.af!=='busca')acFiltro(t);return;}
  if(t.dataset&&t.dataset.cap){onCapture(t);return;}
  if(t.id==='dfrom'||t.id==='dto'){if(t.id==='dfrom')S.from=t.value;else S.to=t.value;S.range='custom';S.limit=40;render();}
 });
 document.addEventListener('input',ev=>{
  const t=ev.target;
+ if(t.dataset&&t.dataset.pf==='busca'){pnFiltro(t);return;}
+ if(t.dataset&&t.dataset.af==='busca'){acFiltro(t);return;}
  if(t.id==='q'){S.q=t.value;S.limit=40;const pos=t.selectionStart;render();const n=$('#q');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}return;}
  const k=t.dataset&&t.dataset.k;if(!k)return;
  let v=t.value;
@@ -1562,6 +1870,7 @@ async function sincronizarUsuarioLogado(){
    }
   }else if(res.status===401){
    Auth.clear();
+   pnReset();
    render();
   }
  }catch(e){}

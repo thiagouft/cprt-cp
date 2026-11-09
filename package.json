@@ -4,7 +4,8 @@
   "description": "Controle de retirada e mobilização de aço com leitura automática de etiqueta, placa e crachá",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/painel-calc.test.js"
   },
   "dependencies": {
     "pg": "^8.13.1"

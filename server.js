@@ -83,7 +83,8 @@ async function initDb() {
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS trocar_senha BOOLEAN DEFAULT FALSE;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_excluir BOOLEAN DEFAULT FALSE;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_gerenciar_usuarios BOOLEAN DEFAULT FALSE;
-      UPDATE usuarios SET pode_excluir = TRUE, pode_gerenciar_usuarios = TRUE WHERE login = 'admin' OR role = 'admin';
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_ver_painel BOOLEAN DEFAULT FALSE;
+      UPDATE usuarios SET pode_excluir = TRUE, pode_gerenciar_usuarios = TRUE, pode_ver_painel = TRUE WHERE login = 'admin' OR role = 'admin';
 
       CREATE TABLE IF NOT EXISTS sessoes (
         token VARCHAR(128) PRIMARY KEY,
@@ -133,8 +134,8 @@ async function getAuthUser(req) {
 
   try {
     const r = await pool.query(
-      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir, u.pode_gerenciar_usuarios 
-       FROM sessoes s 
+      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir, u.pode_gerenciar_usuarios, u.pode_ver_painel
+       FROM sessoes s
        JOIN usuarios u ON u.id = s.usuario_id 
        WHERE s.token = $1 AND s.expires_at > NOW()`,
       [token]
@@ -263,11 +264,12 @@ async function authLogin(req, res) {
 
     const podeExcluir = !!usuario.pode_excluir || usuario.role === 'admin' || usuario.login === 'admin';
     const podeGerenciar = !!usuario.pode_gerenciar_usuarios || usuario.role === 'admin' || usuario.login === 'admin';
+    const podePainel = podeVerPainel(usuario);
     return json(res, 200, {
       ok: true,
       token,
       trocar_senha: !!usuario.trocar_senha,
-      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir, pode_gerenciar_usuarios: podeGerenciar }
+      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir, pode_gerenciar_usuarios: podeGerenciar, pode_ver_painel: podePainel }
     });
   } catch (e) {
     console.error('Erro no login:', e);
@@ -320,7 +322,8 @@ async function authMe(req, res, user) {
       role: user.role,
       trocar_senha: !!user.trocar_senha,
       pode_excluir: podeExcluir,
-      pode_gerenciar_usuarios: podeGerenciar
+      pode_gerenciar_usuarios: podeGerenciar,
+      pode_ver_painel: podeVerPainel(user)
     }
   });
 }
@@ -331,7 +334,7 @@ async function listarUsuarios(req, res, user) {
     return json(res, 403, { erro: 'Sem permissão para gerenciar usuários.' });
   }
   try {
-    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, created_at FROM usuarios ORDER BY id ASC');
+    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, created_at FROM usuarios ORDER BY id ASC');
     return json(res, 200, { ok: true, usuarios: r.rows });
   } catch (e) {
     return json(res, 500, { erro: 'Erro ao buscar usuários.' });
@@ -352,6 +355,7 @@ async function criarUsuario(req, res, user) {
   const role = body.role === 'admin' ? 'admin' : 'user';
   const podeExcluir = !!body.pode_excluir;
   const podeGerenciar = !!body.pode_gerenciar_usuarios;
+  const podePainel = !!body.pode_ver_painel || role === 'admin';
 
   if (!nome || !login || !senha) {
     return json(res, 400, { erro: 'Preencha Nome, Login e Senha.' });
@@ -365,8 +369,8 @@ async function criarUsuario(req, res, user) {
 
     const { hash, salt } = hashSenha(senha);
     const r = await pool.query(
-      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7) RETURNING id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, created_at',
-      [nome, login, hash, salt, role, podeExcluir, podeGerenciar]
+      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8) RETURNING id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, created_at',
+      [nome, login, hash, salt, role, podeExcluir, podeGerenciar, podePainel]
     );
 
     return json(res, 201, { ok: true, usuario: r.rows[0] });
@@ -402,6 +406,11 @@ async function atualizarPermissaoUsuario(req, res, user, id) {
     if (body.pode_gerenciar_usuarios !== undefined) {
       updates.push(`pode_gerenciar_usuarios = $${idx++}`);
       values.push(!!body.pode_gerenciar_usuarios);
+    }
+
+    if (body.pode_ver_painel !== undefined) {
+      updates.push(`pode_ver_painel = $${idx++}`);
+      values.push(!!body.pode_ver_painel);
     }
 
     if (updates.length === 0) return json(res, 400, { erro: 'Nenhuma permissão informada.' });
@@ -536,6 +545,33 @@ async function listarRegistros(req, res, user) {
   }
 }
 
+function podeVerPainel(u) {
+  return !!u && (!!u.pode_ver_painel || u.role === 'admin' || u.login === 'admin');
+}
+
+// Base completa e enxuta para o Painel: todas as linhas, sem fotos/miniaturas e sem limite.
+async function baseDoPainel(req, res, user) {
+  if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (!podeVerPainel(user)) return json(res, 403, { erro: 'Você não tem permissão para acessar o Painel.' });
+  try {
+    const r = await pool.query(`
+      SELECT id, protocolo, op, at, controlador, patio, prod,
+             (dados - 'thumb' - 'photos') AS dados,
+             (photos->'notafiscal'->>'data' IS NOT NULL) AS tem_nf
+      FROM registros
+      ORDER BY at ASC
+    `);
+    const registros = r.rows.map(row => Object.assign({}, row.dados, {
+      id: row.id, protocolo: row.protocolo, op: row.op, at: row.at.toISOString(),
+      controlador: row.controlador, patio: row.patio, prod: row.prod, tem_nf: !!row.tem_nf
+    }));
+    return json(res, 200, { ok: true, geradoEm: new Date().toISOString(), total: registros.length, registros });
+  } catch (e) {
+    console.error('Erro ao montar base do painel:', e);
+    return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
 async function obterFotosRegistro(req, res, user, id) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
   try {
@@ -651,6 +687,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Registros
+  if (p === '/api/painel/base' && req.method === 'GET') return baseDoPainel(req, res, user);
   if (p === '/api/registros' && req.method === 'GET') return listarRegistros(req, res, user);
   if (p === '/api/registros' && req.method === 'POST') return salvarRegistro(req, res, user);
   if (p.startsWith('/api/registros/') && p.endsWith('/fotos') && req.method === 'GET') {

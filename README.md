@@ -38,6 +38,21 @@ Acesse no navegador:
 
 ---
 
+## Painel
+Menu **Painel** com duas visões, calculadas em tempo real sobre todos os registros do banco (mesmas colunas do Histórico e do CSV):
+- **Painel geral:** registros, entradas, retiradas, peso, barras, saldo no pátio, peso por dia, por pátio, por controlador, por bitola e produto (aço pronto, barra reta e cordoalha) e últimos registros.
+- **Aço pronto:** onde está o aço por pátio e Nome da Rua, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
+
+Filtros: busca de texto (em todos os campos ou em uma coluna), pátio, operação, produto, período (Hoje, 7 dias, 30 dias, todo o período) e datas De/Até livres.
+
+**Permissão:** o Painel só aparece para quem tem a permissão "Painel" (Usuários → *Permitir Painel*). Administradores têm acesso sempre; usuário comum não, por padrão. O servidor também bloqueia `GET /api/painel/base` sem a permissão.
+
+O cálculo fica em `public/painel-calc.js` (sem dependência de tela) e reproduz as regras do `Dash.xlsx`. Para validar contra a planilha:
+```bash
+python -X utf8 tests/export_dash.py   # gera tests/fixtures/dash-golden.json (fora do git)
+npm test
+```
+
 ## Publicar em Produção
 A câmera do celular só abre em conexões seguras **HTTPS** (exceto em `localhost`). 
 Em produção, utilize um proxy reverso (Nginx, Caddy ou Cloudflare) com certificado SSL (Let's Encrypt).
