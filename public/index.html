@@ -1050,7 +1050,7 @@ function recRows(r){
  const mid=cord?[['Material',r.material],['Descrição',r.descricao],['Aço (classe)',r.aco],['Diâmetro',r.bitola?nf(r.bitola,2)+' mm':''],['Norma',r.norma],['Ordem de produção',r.ordem],['Sentido de torção',r.torcao],['Resistência',r.resist],['Peso bruto',r.pbruto?nf(r.pbruto,0)+' kg':''],['Peso líquido',r.kg!=null?nf(r.kg,0)+' kg':''],['Espessura mínima',r.espessura],['Metragem',r.m!=null?nf(r.m,0)+' m':''],['RE',r.re],['Data de fabricação',r.datafab],['Código de barras',r.cod]]
   :barra?[['Marca',r.marca],['Material',r.material],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento da barra',r.comp?nf(r.comp/100,2)+' m':''],['Norma',r.norma],['Corrida',r.corrida],['Feixe',r.feixe],['Lote',r.lote],['Peso líquido',r.kg!=null?nf(r.kg,0)+' kg':''],[r.barrasContadas?'Barras (contadas)':'Barras (estimadas)',r.qtd],['Metros lineares',r.m!=null?nf(r.m,0)+' m':''],['Código de barras',r.cod]]
   :[['OS',r.os],['Código da etiqueta',r.cod],['CPT / CPM / DF',r.cpt],['Desenho / posição',[r.desenho,r.posicao].filter(Boolean).join(' / ')],['Elemento / CJ',[r.elemento,r.cj&&('CJ '+r.cj)].filter(Boolean).join(' · ')],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento × barras',r.comp+' cm × '+r.qtd],['Peso estimado',r.kg!=null?nf(r.kg,1)+' kg ('+nf(r.m,1)+' m)':'']];
- const temNf=!!(r.tem_nf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data));
+ const temNf=!!(r.tem_nf||r.cargaNf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data));
  const tail=[['Placa',r.placa],['Motorista',r.motorista],['Empresa',r.empresa],['Doc. / Crachá',r.cracha],[o.destL,r.destino],[o.autL,r.autorizador],['Nota Fiscal',temNf?'Anexada ao registro':''],['Observações',r.obs]];
  return head.concat(mid,tail).filter(x=>x[1]);
 }
@@ -1337,8 +1337,23 @@ function confirmBox(msg,okLabel){
   $('#cb-no').onclick=()=>{closeLayer();res(false)};$('#cb-ok').onclick=()=>{closeLayer();res(true)};$('#cb-no').focus();
  });
 }
+// Faltam fotos para exibir? (nas cargas, placa/crachá/nota ficam só no 1º registro, indicado por cargaFotosDe)
+function faltaFoto(r){
+ const tem=k=>r.photos&&r.photos[k]&&r.photos[k].data;
+ return !tem('etiqueta')||(!!r.cargaFotosDe&&!(tem('placa')&&tem('cracha')));
+}
 async function carregarFotosRegistro(r){
- if(!r||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data))return r;
+ if(!r||!faltaFoto(r))return r;
+ const tem=k=>r.photos&&r.photos[k]&&r.photos[k].data;
+ if(r.cargaFotosDe&&tem('etiqueta')){ // só faltam as fotos da carga: tenta pegar no aparelho antes de ir ao servidor
+  let src=(S.records.find(x=>x.id===r.cargaFotosDe)||{}).photos;
+  if(!fotosCompletas(src)){const l=await DB.get(r.cargaFotosDe);src=l&&l.photos;}
+  if(fotosCompletas(src)){
+   r.photos=Object.assign({},r.photos);
+   ['placa','cracha','notafiscal'].forEach(k=>{if(!tem(k)&&src[k])r.photos[k]=src[k];});
+   return r;
+  }
+ }
  try{
   const res=await fetch('/api/registros/'+encodeURIComponent(r.id)+'/fotos',{
    headers:Auth.token?{'authorization':'Bearer '+Auth.token}:{}
@@ -1352,7 +1367,7 @@ async function carregarFotosRegistro(r){
 }
 async function openRecord(id){
  let r=S.records.find(x=>x.id===id);if(!r)return;
- if(!r.photos||!r.photos.etiqueta||!r.photos.etiqueta.data){
+ if(faltaFoto(r)){
   toast('Carregando fotos...');
   r=await carregarFotosRegistro(r);
  }
@@ -1380,7 +1395,7 @@ function csvOf(list){
  const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Localização','Autorizado/Solicitado por','Observações','Nota Fiscal'];
  const q=v=>{v=v==null?'':String(v);return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
  const rows=list.slice().sort((a,b)=>a.at<b.at?-1:1).map(r=>{const d=new Date(r.at),cord=r.prod==='cord';
-  return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.tem_nf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data))?'Sim':'Não'].map(q).join(';');});
+  return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.tem_nf||r.cargaNf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data))?'Sim':'Não'].map(q).join(';');});
  return '﻿'+H.join(';')+'\r\n'+rows.join('\r\n');
 }
 function comprovanteHtml(r){
@@ -1424,7 +1439,7 @@ function semFotos(r){ // cópia leve: sem fotos, mas com miniatura e o aviso de 
  if(!r||!r.photos)return r;
  const {photos,...x}=r;
  x.has_photos=true;
- x.tem_nf=!!(photos.notafiscal&&photos.notafiscal.data);
+ x.tem_nf=!!((photos.notafiscal&&photos.notafiscal.data)||r.cargaNf);
  if(!x.thumb&&photos.etiqueta)x.thumb=photos.etiqueta.thumb||photos.etiqueta.data||null;
  return x;
 }
@@ -1559,7 +1574,15 @@ async function submit(){
   const igual=S.records.find(x=>x.id!==r.id&&PainelCalc.chaveEtiqueta(x)===chave);
   if(igual&&!(await confirmBox('Esta etiqueta parece já registrada: '+igual.protocolo+' em '+fdt(igual.at)+(igual.controlador?' ('+igual.controlador+')':'')+'. Registrar mesmo assim?','Registrar mesmo assim'))){S.submitting=false;return;}
  }
- if(S.carga){r.carga=S.carga.id;r.cargaSeq=cargaItens().length+1;}
+ if(S.carga){
+  r.carga=S.carga.id;r.cargaSeq=cargaItens().length+1;
+  if(r.id!==S.carga.id){
+   // placa, crachá e nota já estão gravados na 1ª etiqueta da carga: aqui vai só a foto da etiqueta, com a indicação de onde estão as outras
+   r.cargaFotosDe=S.carga.id;
+   r.cargaNf=!!(S.carga.fotos.notafiscal&&S.carga.fotos.notafiscal.data);
+   r.photos={etiqueta:r.photos.etiqueta};
+  }
+ }
 
  await DB.put(r);
  S.records.unshift(r);
@@ -1775,7 +1798,7 @@ document.addEventListener('click',async ev=>{
   const cid=r.carga||r.id;
   if(S.carga&&S.carga.id!==cid&&!(await confirmBox('Já existe uma carga em andamento ('+S.carga.base.placa+'). Trocar para a carga de '+r.placa+'? As etiquetas já salvas continuam salvas.','Trocar de carga')))return;
   closeLayer();toast('Carregando a carga…');
-  const ph=await fotosDaCarga([r.id]);
+  const ph=await fotosDaCarga([r.id,r.cargaFotosDe||r.carga].filter(Boolean));
   if(!ph){toast('Não foi possível carregar as fotos deste registro. Verifique a conexão e tente de novo.');return;}
   if(!r.carga){
    // registro individual passa a ser a 1ª etiqueta da carga; reenvia o registro completo (com as fotos) para não perdê-las no servidor
@@ -1823,7 +1846,7 @@ document.addEventListener('click',async ev=>{
  if(a==='comprovante'){
   let r=S.records.find(x=>x.id===t.dataset.id);
   if(r){
-   if(!r.photos||!r.photos.etiqueta||!r.photos.etiqueta.data){
+   if(faltaFoto(r)){
     toast('Baixando fotos para o comprovante...');
     r=await carregarFotosRegistro(r);
    }

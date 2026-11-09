@@ -526,7 +526,7 @@ async function listarRegistros(req, res, user) {
       SELECT 
         id, protocolo, op, at, controlador, patio, prod, dados, 
         (photos IS NOT NULL AND photos != '{}'::jsonb) AS has_photos,
-        (photos->'notafiscal'->>'data' IS NOT NULL) AS tem_nf,
+        (photos->'notafiscal'->>'data' IS NOT NULL OR dados->>'cargaNf' = 'true') AS tem_nf,
         COALESCE(dados->>'thumb', photos->'etiqueta'->>'thumb', photos->'etiqueta'->>'data') AS thumb
       FROM registros 
       ORDER BY at DESC LIMIT 1000
@@ -565,7 +565,7 @@ async function baseDoPainel(req, res, user) {
     const r = await pool.query(`
       SELECT id, protocolo, op, at, controlador, patio, prod,
              (dados - 'thumb' - 'photos') AS dados,
-             (photos->'notafiscal'->>'data' IS NOT NULL) AS tem_nf
+             (photos->'notafiscal'->>'data' IS NOT NULL OR dados->>'cargaNf' = 'true') AS tem_nf
       FROM registros
       ORDER BY at ASC
     `);
@@ -583,9 +583,21 @@ async function baseDoPainel(req, res, user) {
 async function obterFotosRegistro(req, res, user, id) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
   try {
-    const r = await pool.query('SELECT photos FROM registros WHERE id = $1', [id]);
+    const r = await pool.query("SELECT photos, dados->>'cargaFotosDe' AS ref FROM registros WHERE id = $1", [id]);
     if (!r.rows.length) return json(res, 404, { erro: 'Registro não encontrado.' });
-    return json(res, 200, { ok: true, photos: r.rows[0].photos || {} });
+    let photos = r.rows[0].photos || {};
+    const ref = r.rows[0].ref;
+    // Numa carga, placa, crachá e nota ficam gravados só no 1º registro; os demais apontam para ele (cargaFotosDe).
+    if (ref && ref !== id) {
+      const falta = ['placa', 'cracha', 'notafiscal'].filter(k => !(photos[k] && photos[k].data));
+      if (falta.length) {
+        const o = await pool.query('SELECT photos FROM registros WHERE id = $1', [ref]);
+        const op = (o.rows[0] && o.rows[0].photos) || {};
+        photos = Object.assign({}, photos);
+        falta.forEach(k => { if (op[k]) photos[k] = op[k]; });
+      }
+    }
+    return json(res, 200, { ok: true, photos });
   } catch (e) {
     console.error('Erro ao buscar fotos do registro:', e);
     return json(res, 500, { erro: 'Erro ao buscar fotos do registro.' });
@@ -631,11 +643,30 @@ async function excluirRegistro(req, res, user, id) {
   if (user && user.role !== 'admin' && user.login !== 'admin' && !user.pode_excluir) {
     return json(res, 403, { erro: 'Você não tem permissão para excluir registros.' });
   }
+  const c = await pool.connect();
   try {
-    await pool.query('DELETE FROM registros WHERE id = $1', [id]);
+    await c.query('BEGIN');
+    // Se este registro guarda as fotos de uma carga (placa, crachá, nota), elas passam para a etiqueta seguinte da carga
+    // antes da exclusão; assim as demais etiquetas não ficam sem essas fotos.
+    const refs = await c.query("SELECT id, photos FROM registros WHERE dados->>'cargaFotosDe' = $1 ORDER BY at ASC, id ASC", [id]);
+    if (refs.rows.length) {
+      const o = await c.query('SELECT photos FROM registros WHERE id = $1', [id]);
+      const op = (o.rows[0] && o.rows[0].photos) || {};
+      const heranca = {};
+      ['placa', 'cracha', 'notafiscal'].forEach(k => { if (op[k] && op[k].data) heranca[k] = op[k]; });
+      const novo = refs.rows[0];
+      await c.query("UPDATE registros SET photos = $2, dados = dados - 'cargaFotosDe' WHERE id = $1", [novo.id, JSON.stringify(Object.assign({}, novo.photos || {}, heranca))]);
+      await c.query("UPDATE registros SET dados = jsonb_set(dados, '{cargaFotosDe}', to_jsonb($2::text)) WHERE dados->>'cargaFotosDe' = $1 AND id <> $2", [id, novo.id]);
+    }
+    await c.query('DELETE FROM registros WHERE id = $1', [id]);
+    await c.query('COMMIT');
     return json(res, 200, { ok: true });
   } catch (e) {
+    try { await c.query('ROLLBACK'); } catch (e2) {}
+    console.error('Erro ao excluir registro:', e.message);
     return json(res, 500, { erro: 'Erro ao excluir registro.' });
+  } finally {
+    c.release();
   }
 }
 

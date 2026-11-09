@@ -118,7 +118,7 @@
       metros: num(r.m), kg: num(r.kg), pbruto: numOuNull(r.pbruto), torcao: str(r.torcao), resist: str(r.resist), norma: str(r.norma),
       datafab: str(r.datafab), re: str(r.re), placa: str(r.placa), motorista: str(r.motorista), empresa: str(r.empresa), cracha: str(r.cracha),
       destino: str(r.destino), autorizador: str(r.autorizador), obs: str(r.obs),
-      nf: (r.tem_nf || (r.photos && r.photos.notafiscal && r.photos.notafiscal.data) || r.nf === 'Sim') ? 'Sim' : 'Não'
+      nf: (r.tem_nf || r.cargaNf || (r.photos && r.photos.notafiscal && r.photos.notafiscal.data) || r.nf === 'Sim') ? 'Sim' : 'Não'
     };
     L.local = ruaPadrao(L.destino);
     L.campos = [L.protocolo, L.operacao, L.patio, L.produto, fmtData(dia), fmtHora(min), L.controlador, L.os, L.cod, L.cpt, L.material,

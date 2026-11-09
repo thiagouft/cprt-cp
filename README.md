@@ -59,6 +59,7 @@ Uma carreta costuma trazer 10 a 15 etiquetas com a mesma placa, crachá e nota. 
 O lançamento individual continua igual (**"Novo registro"**). Cada etiqueta continua sendo **um registro** (mesmos campos, protocolo e CSV); as etiquetas da mesma carga só ganham os campos opcionais `carga` e `cargaSeq`.
 
 - **Etiqueta repetida:** antes de salvar, o sistema avisa se a mesma etiqueta já foi registrada na mesma operação (o controlador pode confirmar mesmo assim).
+- **Fotos guardadas uma vez:** placa, crachá e nota ficam gravados só no 1º registro da carga; as demais etiquetas guardam só a foto da etiqueta e o campo `cargaFotosDe`, que aponta para o 1º registro. O servidor devolve as quatro fotos normalmente (detalhe do Histórico e comprovante). Se o 1º registro da carga for excluído, as fotos da carga passam automaticamente para a etiqueta seguinte. Cargas feitas antes dessa mudança continuam com as fotos em cada registro.
 - **Sem conexão:** o registro fica salvo no aparelho, aparece como pendente no Histórico e é reenviado ao voltar a conexão (ou em "Enviar agora").
 - **Retomar uma carga:** se o app fechar no meio, a tela inicial mostra "Há uma carga em andamento" com **Retomar carga** (vale por 12 horas, para o mesmo usuário). Também dá para abrir qualquer registro no Histórico e usar **"Adicionar etiqueta a esta carga"**: se o registro era individual, ele passa a ser a 1ª etiqueta da carga.
 
