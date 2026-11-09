@@ -60,6 +60,10 @@ O lançamento individual continua igual (**"Novo registro"**). Cada etiqueta con
 
 - **Etiqueta repetida:** antes de salvar, o sistema avisa se a mesma etiqueta já foi registrada na mesma operação (o controlador pode confirmar mesmo assim).
 - **Sem conexão:** o registro fica salvo no aparelho, aparece como pendente no Histórico e é reenviado ao voltar a conexão (ou em "Enviar agora").
+- **Retomar uma carga:** se o app fechar no meio, a tela inicial mostra "Há uma carga em andamento" com **Retomar carga** (vale por 12 horas, para o mesmo usuário). Também dá para abrir qualquer registro no Histórico e usar **"Adicionar etiqueta a esta carga"**: se o registro era individual, ele passa a ser a 1ª etiqueta da carga.
+
+## Armazenamento no celular
+As fotos de cada registro (cerca de 750 KB) ficam no aparelho só até o servidor confirmar o recebimento. Depois disso o registro local é enxugado (fica sem fotos, com miniatura) e os registros com mais de 7 dias já confirmados são apagados do aparelho; o servidor guarda tudo. Nunca são enxugados: registros pendentes de envio, registros que o servidor ainda não conhece e a 1ª etiqueta de uma carga aberta (para retomar sem internet). Ao abrir o app, os registros locais são lidos um por vez, sem as fotos, para não pesar a memória.
 
 ## Publicar em Produção
 A câmera do celular só abre em conexões seguras **HTTPS** (exceto em `localhost`). 

@@ -526,6 +526,7 @@ async function listarRegistros(req, res, user) {
       SELECT 
         id, protocolo, op, at, controlador, patio, prod, dados, 
         (photos IS NOT NULL AND photos != '{}'::jsonb) AS has_photos,
+        (photos->'notafiscal'->>'data' IS NOT NULL) AS tem_nf,
         COALESCE(dados->>'thumb', photos->'etiqueta'->>'thumb', photos->'etiqueta'->>'data') AS thumb
       FROM registros 
       ORDER BY at DESC LIMIT 1000
@@ -540,6 +541,7 @@ async function listarRegistros(req, res, user) {
         patio: row.patio,
         prod: row.prod,
         has_photos: row.has_photos,
+        tem_nf: !!row.tem_nf,
         thumb: row.thumb || (row.dados && row.dados.thumb) || null
       });
       return rec;

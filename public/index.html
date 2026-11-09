@@ -406,7 +406,23 @@ const DB={ok:false,db:null,mem:[],
  async all(){ if(!this.ok) return this.mem.slice(); try{return await this.tx('readonly',s=>s.getAll())||[];}catch(e){this.ok=false;return this.mem.slice();} },
  async put(r){ if(this.ok){try{await this.tx('readwrite',s=>s.put(r));return;}catch(e){this.ok=false;}} this.mem=this.mem.filter(x=>x.id!==r.id);this.mem.push(r); },
  async del(id){ if(this.ok){try{await this.tx('readwrite',s=>s.delete(id));return;}catch(e){this.ok=false;}} this.mem=this.mem.filter(x=>x.id!==id); },
- async clear(){ if(this.ok){try{await this.tx('readwrite',s=>s.clear());}catch(e){}} this.mem=[]; }
+ async clear(){ if(this.ok){try{await this.tx('readwrite',s=>s.clear());}catch(e){}} this.mem=[]; },
+ async get(id){ if(!this.ok)return this.mem.find(x=>x.id===id)||null; try{return (await this.tx('readonly',s=>s.get(id)))||null;}catch(e){return null;} },
+ // Lê um registro por vez (sem carregar todas as fotos na memória) e devolve cópias leves; 'manter(r)' deixa o registro completo.
+ async leves(manter){
+  if(!this.ok)return this.mem.map(r=>manter(r)?r:semFotos(r));
+  try{return await new Promise((res,rej)=>{const out=[],t=this.db.transaction('rec','readonly'),rq=t.objectStore('rec').openCursor();
+   rq.onsuccess=()=>{const c=rq.result;if(!c)return;out.push(manter(c.value)?c.value:semFotos(c.value));c.continue();};
+   t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});}
+  catch(e){this.ok=false;return this.mem.map(r=>manter(r)?r:semFotos(r));}
+ },
+ // Percorre um por vez; fn devolve undefined (mantém), null (apaga) ou um objeto (substitui).
+ async enxuga(fn){
+  if(!this.ok)return;
+  await new Promise((res,rej)=>{const t=this.db.transaction('rec','readwrite'),rq=t.objectStore('rec').openCursor();
+   rq.onsuccess=()=>{const c=rq.result;if(!c)return;const v=fn(c.value);if(v===null)c.delete();else if(v)c.update(v);c.continue();};
+   t.oncomplete=res;t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});
+ }
 };
 const Cfg={mem:{},get(k){try{return localStorage.getItem('cprt-aco-'+k)||this.mem[k]||''}catch(e){return this.mem[k]||''}},
  set(k,v){this.mem[k]=v;try{localStorage.setItem('cprt-aco-'+k,v)}catch(e){}}};
@@ -865,18 +881,21 @@ async function sincronizarRegistrosComBanco(){
    const data=await res.json();
    if(data.registros&&Array.isArray(data.registros)){
     // Guarda apenas os 50 registros mais recentes no IndexedDB local para manter o celular ultraleve
-    const recentes = data.registros.slice(0, 50);
+    const recentes = data.registros.slice(0, 50), ativa = cargaAtivaId();
     for(const r of recentes){
+     if(r.id===ativa)continue; // mantém completa a 1ª etiqueta da carga aberta (para retomar sem internet)
      await DB.put(r);
     }
+    S.srvIds=new Set(data.registros.map(r=>r.id));
     S.records=data.registros.slice().sort((a,b)=>a.at<b.at?1:-1);
     // registros ainda não confirmados pelo servidor continuam visíveis (e serão reenviados)
     const fila=Fila.ids();
     if(fila.length){
-     const locais=await DB.all();
+     const locais=await DB.leves(x=>fila.indexOf(x.id)>-1);
      locais.filter(x=>fila.indexOf(x.id)>-1&&!S.records.some(y=>y.id===x.id)).forEach(x=>S.records.push(x));
      S.records.sort((a,b)=>a.at<b.at?1:-1);
     }
+    limpaAparelho(); // enxuga o que o servidor já confirmou (em segundo plano)
     // Para poupar memória RAM no celular, remove referências pesadas de fotos antigas da memória ativa
     S.records.forEach(r=>{
      if(r.has_photos&&r.photos) delete r.photos;
@@ -889,7 +908,7 @@ async function sincronizarRegistrosComBanco(){
 
 function vOps(){
  const today=S.records.filter(r=>dkey(r.at)===dkey(new Date())).length;
- return '<h2 class="sec" style="margin-top:6px"><span class="n">1</span>Pátio e operação</h2>'+
+ return cargaBanner()+'<h2 class="sec" style="margin-top:6px"><span class="n">1</span>Pátio e operação</h2>'+
  '<div class="card pad" style="margin-bottom:12px"><div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">Pátio</div><div class="seg" style="margin:0">'+PATIOS.map(p=>'<button class="chip" data-act="patio" data-p="'+esc(p)+'" aria-pressed="'+(S.patio===p)+'">'+esc(p)+'</button>').join('')+'</div></div>'+
  '<div class="ops">'+
  ['ret','mob'].map(k=>'<button class="op '+k+'" data-act="op" data-op="'+k+'"><span class="ico">'+ic(k==='ret'?'out':'mob')+'</span><span class="tt">'+OPS[k].label+'</span><span class="dd">'+OPS[k].desc+'</span></button>').join('')+
@@ -1031,7 +1050,7 @@ function recRows(r){
  const mid=cord?[['Material',r.material],['Descrição',r.descricao],['Aço (classe)',r.aco],['Diâmetro',r.bitola?nf(r.bitola,2)+' mm':''],['Norma',r.norma],['Ordem de produção',r.ordem],['Sentido de torção',r.torcao],['Resistência',r.resist],['Peso bruto',r.pbruto?nf(r.pbruto,0)+' kg':''],['Peso líquido',r.kg!=null?nf(r.kg,0)+' kg':''],['Espessura mínima',r.espessura],['Metragem',r.m!=null?nf(r.m,0)+' m':''],['RE',r.re],['Data de fabricação',r.datafab],['Código de barras',r.cod]]
   :barra?[['Marca',r.marca],['Material',r.material],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento da barra',r.comp?nf(r.comp/100,2)+' m':''],['Norma',r.norma],['Corrida',r.corrida],['Feixe',r.feixe],['Lote',r.lote],['Peso líquido',r.kg!=null?nf(r.kg,0)+' kg':''],[r.barrasContadas?'Barras (contadas)':'Barras (estimadas)',r.qtd],['Metros lineares',r.m!=null?nf(r.m,0)+' m':''],['Código de barras',r.cod]]
   :[['OS',r.os],['Código da etiqueta',r.cod],['CPT / CPM / DF',r.cpt],['Desenho / posição',[r.desenho,r.posicao].filter(Boolean).join(' / ')],['Elemento / CJ',[r.elemento,r.cj&&('CJ '+r.cj)].filter(Boolean).join(' · ')],['Bitola / aço',nf(r.bitola,1)+' mm'+(r.aco?' · '+r.aco:'')],['Comprimento × barras',r.comp+' cm × '+r.qtd],['Peso estimado',r.kg!=null?nf(r.kg,1)+' kg ('+nf(r.m,1)+' m)':'']];
- const temNf=!!(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data);
+ const temNf=!!(r.tem_nf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data));
  const tail=[['Placa',r.placa],['Motorista',r.motorista],['Empresa',r.empresa],['Doc. / Crachá',r.cracha],[o.destL,r.destino],[o.autL,r.autorizador],['Nota Fiscal',temNf?'Anexada ao registro':''],['Observações',r.obs]];
  return head.concat(mid,tail).filter(x=>x[1]);
 }
@@ -1055,7 +1074,7 @@ function recItem(r){
  const thImg=r.thumb||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.thumb)||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data)||'';
  const thHtml=thImg?'<img src="'+thImg+'" alt="">':ic('tag');
  return '<button class="rec" data-act="open" data-id="'+r.id+'"><span class="th">'+thHtml+'</span><span><span class="l1"><span class="pill '+r.op+'">'+OPS[r.op].label+'</span><span class="pr">'+esc(r.placa)+'</span></span>'+
- '<span class="l2" style="display:block">'+(r.prod==='barra'?'Barra reta '+nf(r.bitola,1)+' mm × '+nf(r.comp/100,0)+' m'+(r.feixe?' · Feixe '+esc(r.feixe):''):r.prod==='cord'?'Cordoalha '+nf(r.bitola,1)+' mm · '+nf(r.m,0)+' m'+(r.ordem?' · OP '+esc(r.ordem):''):'OS '+esc(r.os)+(r.elemento?' · '+esc(r.elemento):'')+' · '+nf(r.bitola,1)+' mm × '+r.qtd)+'</span><span class="l2" style="display:block">'+esc(r.motorista)+' · '+fdt(r.at)+(r.patio?' · '+esc(r.patio):'')+'</span></span>'+
+ '<span class="l2" style="display:block">'+(r.prod==='barra'?'Barra reta '+nf(r.bitola,1)+' mm × '+nf(r.comp/100,0)+' m'+(r.feixe?' · Feixe '+esc(r.feixe):''):r.prod==='cord'?'Cordoalha '+nf(r.bitola,1)+' mm · '+nf(r.m,0)+' m'+(r.ordem?' · OP '+esc(r.ordem):''):'OS '+esc(r.os)+(r.elemento?' · '+esc(r.elemento):'')+' · '+nf(r.bitola,1)+' mm × '+r.qtd)+'</span><span class="l2" style="display:block">'+esc(r.motorista)+' · '+fdt(r.at)+(r.patio?' · '+esc(r.patio):'')+(r.carga&&r.cargaSeq?' · carga, etiqueta '+r.cargaSeq:'')+'</span></span>'+
  '<span class="kg">'+(r.kg!=null?nf(r.kg,0):'—')+'<small>kg</small></span></button>';
 }
 function patioChips(mb){
@@ -1346,7 +1365,7 @@ async function openRecord(id){
   ? '<div class="photos3">'+phKeys.map(k=>'<figure><img src="'+(r.photos[k]?r.photos[k].data:'')+'" alt="'+esc(PH[k]?PH[k].t:k)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Doc. / Crachá',notafiscal:'Nota Fiscal'})[k]+'</figcaption></figure>').join('')+'</div>'
   : '<div class="note">Fotos detalhadas não disponíveis offline.</div>';
  sheet(r.protocolo,phHtml+'<div class="card pad mt">'+dlHtml(r)+'</div>',
- '<div class="row mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button>'+btnExcluir+'</div>');
+ '<div class="row mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="addcarga" data-id="'+r.id+'">'+ic('plus')+'Adicionar etiqueta a esta carga</button>'+btnExcluir+'</div>');
 }
 function zoom(src){layer.insertAdjacentHTML('beforeend','<div class="lightbox" data-act="closezoom"><button class="iconbtn" aria-label="Fechar imagem" data-act="closezoom">'+ic('x')+'</button><img src="'+src+'" alt="Foto ampliada"></div>');}
 
@@ -1361,7 +1380,7 @@ function csvOf(list){
  const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Localização','Autorizado/Solicitado por','Observações','Nota Fiscal'];
  const q=v=>{v=v==null?'':String(v);return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
  const rows=list.slice().sort((a,b)=>a.at<b.at?-1:1).map(r=>{const d=new Date(r.at),cord=r.prod==='cord';
-  return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data)?'Sim':'Não'].map(q).join(';');});
+  return [r.protocolo,OPS[r.op].label,r.patio,prodName(r),d.toLocaleDateString('pt-BR'),d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),r.controlador,cord?r.ordem:r.os,r.cod,r.cpt,r.material,r.descricao||r.marca,r.corrida,r.feixe,r.lote,r.desenho,r.posicao,r.cj,r.elemento,nf(r.bitola,cord?2:1),r.aco,r.comp,cord?'':r.qtd,r.m!=null?nf(r.m,cord?0:2):'',r.kg!=null?nf(r.kg,2):'',r.pbruto?nf(r.pbruto,0):'',r.torcao,r.resist,r.norma,r.datafab,r.re,r.placa,r.motorista,r.empresa,r.cracha,r.destino,r.autorizador,r.obs,(r.tem_nf||(r.photos&&r.photos.notafiscal&&r.photos.notafiscal.data))?'Sim':'Não'].map(q).join(';');});
  return '﻿'+H.join(';')+'\r\n'+rows.join('\r\n');
 }
 function comprovanteHtml(r){
@@ -1400,11 +1419,38 @@ const Fila={
  add(id){const a=this.ids();if(a.indexOf(id)<0){a.push(id);this.salva(a);}},
  del(id){this.salva(this.ids().filter(x=>x!==id));}
 };
+/* ============ Limpeza do aparelho: as fotos ficam só no servidor depois que ele confirma o registro ============ */
+function semFotos(r){ // cópia leve: sem fotos, mas com miniatura e o aviso de que há fotos / nota fiscal no servidor
+ if(!r||!r.photos)return r;
+ const {photos,...x}=r;
+ x.has_photos=true;
+ x.tem_nf=!!(photos.notafiscal&&photos.notafiscal.data);
+ if(!x.thumb&&photos.etiqueta)x.thumb=photos.etiqueta.thumb||photos.etiqueta.data||null;
+ return x;
+}
+function cargaAtivaId(){return (S.carga&&S.carga.id)||(cargaSalva()||{}).id||'';}
+async function enxugaLocal(r){ // chamado logo após o servidor confirmar o envio
+ try{if(r&&r.photos&&r.id!==cargaAtivaId())await DB.put(semFotos(r));}catch(e){}
+}
+let limpando=false;
+async function limpaAparelho(){ // roda depois de sincronizar e ao encerrar uma carga
+ if(limpando||!S.srvIds)return;
+ limpando=true;
+ try{
+  const fila=Fila.ids(),ativa=cargaAtivaId(),limite=Date.now()-7*86400000;
+  await DB.enxuga(r=>{
+   if(fila.indexOf(r.id)>-1||!S.srvIds.has(r.id))return;   // pendente ou ainda desconhecido pelo servidor: nunca mexe
+   if(r.id!==ativa&&r.carga!==ativa&&new Date(r.at).getTime()<limite)return null;   // já está no servidor há mais de 7 dias
+   if(r.photos&&r.id!==ativa)return semFotos(r);
+  });
+ }catch(e){}finally{limpando=false;}
+}
 async function enviarRegistro(r){
  if(!Auth.token)return false;
  try{
-  const res=await fetch('/api/registros',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(r)});
-  if(res.ok){Fila.del(r.id);return true;}
+  const {has_photos,...corpo}=r; // has_photos só existe nas listas vindas do servidor
+  const res=await fetch('/api/registros',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(corpo)});
+  if(res.ok){Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);return true;}
  }catch(e){}
  return false;
 }
@@ -1414,9 +1460,8 @@ async function reenviarPendentes(){
  const ids=Fila.ids();if(!ids.length)return 0;
  reenviando=true;let ok=0;
  try{
-  const locais=await DB.all();
   for(const id of ids){
-   const r=locais.find(x=>x.id===id)||S.records.find(x=>x.id===id);
+   const r=(await DB.get(id))||S.records.find(x=>x.id===id);
    if(!r){Fila.del(id);continue;}
    if(await enviarRegistro(r))ok++;
   }
@@ -1445,6 +1490,46 @@ function cargaCard(){
   '<dl class="dl mt">'+[['Motorista',b.motorista],['Empresa',b.empresa],['Doc. / Crachá',b.cracha],[o.destL,b.destino],[o.autL,b.autorizador]].filter(x=>x[1]).map(x=>'<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>').join('')+'</dl>'+
   (fotos?'<div class="photos3">'+fotos+'</div>':'')+
   '<div class="hint muted" style="font-size:12.5px;margin-top:10px">Placa, crachá, nota e demais dados desta carga são reaproveitados. Fotografe só a próxima etiqueta.</div></div>';
+}
+/* ---- Retomar carga (app fechado no meio, ou carga aberta a partir do Histórico) ---- */
+function salvaCarga(){ // guarda só um resumo (sem fotos) para oferecer "Retomar carga" ao reabrir o app
+ try{
+  if(!S.carga){localStorage.removeItem('cprt_carga');return;}
+  const c=S.carga;
+  localStorage.setItem('cprt_carga',JSON.stringify({id:c.id,op:c.op,patio:c.patio,base:c.base,t:Date.now(),u:Auth.user?Auth.user.id:null}));
+ }catch(e){}
+}
+function setCarga(c){S.carga=c;salvaCarga();if(!c)limpaAparelho();}
+function cargaSalva(){ // resumo guardado, se for deste usuário e recente (12 h)
+ try{
+  const c=JSON.parse(localStorage.getItem('cprt_carga')||'null');
+  if(!c||!c.id||!c.base||!Auth.user||c.u!==Auth.user.id)return null;
+  if(Date.now()-c.t>12*3600*1000){localStorage.removeItem('cprt_carga');return null;}
+  return c;
+ }catch(e){return null;}
+}
+function cargaBanner(){
+ const c=cargaSalva();if(!c||S.carga)return '';
+ const n=S.records.filter(x=>x.carga===c.id).length;
+ return '<div class="card pad" style="margin-bottom:12px;border-left:6px solid var(--'+c.op+')"><b>Há uma carga em andamento</b>'+
+  '<div class="muted" style="font-size:14px;margin-top:2px">'+esc(c.base.placa)+' · '+esc(OPS[c.op].label)+(c.patio?' · Pátio '+esc(c.patio):'')+' · '+n+(n===1?' etiqueta já salva':' etiquetas já salvas')+'</div>'+
+  '<div class="row mt"><button class="btn pri" data-act="resumecarga">'+ic('plus')+'Retomar carga</button><button class="btn" data-act="dropcarga">Descartar</button></div></div>';
+}
+function fotosCompletas(p){return p&&p.placa&&p.placa.data&&p.cracha&&p.cracha.data;}
+async function fotosDaCarga(ids){ // procura as fotos de placa/crachá na memória, no aparelho e, por último, no servidor
+ for(const id of ids){
+  const r=S.records.find(x=>x.id===id);
+  if(r&&fotosCompletas(r.photos))return r.photos;
+  try{const l=await DB.get(id);if(l&&fotosCompletas(l.photos))return l.photos;}catch(e){}
+  const o=await carregarFotosRegistro(r||{id});
+  if(o&&fotosCompletas(o.photos))return o.photos;
+ }
+ return null;
+}
+function retomarCarga(info,ph){
+ if(info.patio&&info.patio!==S.patio){S.patio=info.patio;Cfg.set('patio',S.patio);updateSub();}
+ setCarga({id:info.id,op:info.op,patio:info.patio,fotos:{placa:ph.placa,cracha:ph.cracha,notafiscal:ph.notafiscal||null},base:info.base});
+ S.tab='novo';S.done=null;resetForm();render();topo();
 }
 function cargaResumoHtml(it){
  if(!it.length)return '<div class="note">Nenhuma etiqueta registrada nesta carga.</div>';
@@ -1613,7 +1698,7 @@ document.addEventListener('click',async ev=>{
  if(a==='resetop'){
   if(S.carga){
    if(!await confirmBox('Trocar a operação encerra a carga em andamento. As etiquetas já registradas continuam salvas.','Encerrar e trocar'))return;
-   S.carga=null;resetForm();render();return;
+   setCarga(null);resetForm();render();return;
   }
   if(S.photos.etiqueta||S.photos.placa||S.photos.cracha||S.photos.notafiscal||S.form.os){if(!await confirmBox('Trocar a operação descarta as fotos e dados preenchidos.','Descartar e trocar'))return;}resetForm();render();return;}
  if(a==='delphoto'){
@@ -1639,7 +1724,7 @@ document.addEventListener('click',async ev=>{
   return;
  }
  if(a==='submit'){submit();return;}
- if(a==='again'){S.carga=null;S.done=null;resetForm();render();topo();return;}
+ if(a==='again'){setCarga(null);S.done=null;resetForm();render();topo();return;}
  if(a==='nextcarga'){
   const r=S.done;if(!r)return;
   if(!S.carga){
@@ -1649,13 +1734,13 @@ document.addEventListener('click',async ev=>{
    S.carga={id:r.id,op:r.op,patio:r.patio,
     fotos:{placa:r.photos.placa,cracha:r.photos.cracha,notafiscal:r.photos.notafiscal||null},
     base:{placa:r.placa,motorista:r.motorista,empresa:r.empresa||'',cracha:r.cracha||'',destino:r.destino,autorizador:r.autorizador,controlador:r.controlador}};
-   await DB.put(r);Fila.add(r.id);enviarRegistro(r);
+   await DB.put(r);Fila.add(r.id);enviarRegistro(r);salvaCarga();
   }
   S.done=null;resetForm();render();topo();return;
  }
  if(a==='endcarga'){
   const it=cargaItens();
-  S.carga=null;S.done=null;resetForm();render();topo();
+  setCarga(null);S.done=null;resetForm();render();topo();
   sheet('Carga encerrada',cargaResumoHtml(it),'<div class="row mt"><button class="btn pri" data-act="closelayer">Concluir</button></div>');
   return;
  }
@@ -1673,8 +1758,34 @@ document.addEventListener('click',async ev=>{
   if(!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa)){toast('Placa inválida. Use o formato ABC1D23 ou ABC1234');return;}
   if(!v('motorista')||!v('destino')||!v('autorizador')){toast('Preencha motorista, localização e autorizador.');return;}
   Object.assign(S.carga.base,{placa,motorista:v('motorista'),empresa:v('empresa'),cracha:v('cracha'),destino:v('destino'),autorizador:v('autorizador')});
-  Object.assign(S.form,S.carga.base);
+  Object.assign(S.form,S.carga.base);salvaCarga();
   closeLayer();render();toast('Dados da carga atualizados.');return;
+ }
+ if(a==='resumecarga'){
+  const c=cargaSalva();if(!c){render();return;}
+  toast('Carregando a carga…');
+  const ids=[c.id].concat(S.records.filter(x=>x.carga===c.id&&x.id!==c.id).map(x=>x.id));
+  const ph=await fotosDaCarga(ids);
+  if(!ph){toast('Não foi possível carregar as fotos da carga. Verifique a conexão e tente de novo.');return;}
+  retomarCarga(c,ph);return;
+ }
+ if(a==='dropcarga'){setCarga(null);render();return;}
+ if(a==='addcarga'){
+  const r=S.records.find(x=>x.id===t.dataset.id);if(!r)return;
+  const cid=r.carga||r.id;
+  if(S.carga&&S.carga.id!==cid&&!(await confirmBox('Já existe uma carga em andamento ('+S.carga.base.placa+'). Trocar para a carga de '+r.placa+'? As etiquetas já salvas continuam salvas.','Trocar de carga')))return;
+  closeLayer();toast('Carregando a carga…');
+  const ph=await fotosDaCarga([r.id]);
+  if(!ph){toast('Não foi possível carregar as fotos deste registro. Verifique a conexão e tente de novo.');return;}
+  if(!r.carga){
+   // registro individual passa a ser a 1ª etiqueta da carga; reenvia o registro completo (com as fotos) para não perdê-las no servidor
+   r.carga=r.id;r.cargaSeq=1;
+   const tinha=r.photos;r.photos=ph;
+   await DB.put(r);Fila.add(r.id);enviarRegistro(r);
+   if(!tinha&&r.has_photos)delete r.photos;
+  }
+  retomarCarga({id:cid,op:r.op,patio:r.patio,base:{controlador:Auth.user?Auth.user.nome:r.controlador,placa:r.placa,motorista:r.motorista,empresa:r.empresa||'',cracha:r.cracha||'',destino:r.destino,autorizador:r.autorizador}},ph);
+  return;
  }
  if(a==='reenviar'){toast('Enviando registros pendentes…');await reenviarPendentes();await sincronizarRegistrosComBanco();render();return;}
  if(a==='gohist'){S.tab='hist';render();topo();sincronizarRegistrosComBanco();return;}
@@ -2027,7 +2138,7 @@ async function sincronizarUsuarioLogado(){
  updateSub();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
  await DB.init();
- try{S.records=(await DB.all()).sort((a,b)=>a.at<b.at?1:-1);}catch(e){S.records=[];}
+ try{const pend=Fila.ids();S.records=(await DB.leves(r=>pend.indexOf(r.id)>-1)).sort((a,b)=>a.at<b.at?1:-1);}catch(e){S.records=[];}
  render();
  if(Auth.token){
   sincronizarUsuarioLogado();
