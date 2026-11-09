@@ -616,12 +616,17 @@ async function salvarRegistro(req, res, user) {
   const { id, protocolo, op, at, controlador, patio, prod, photos, ...resto } = rec;
   const usuarioId = user ? user.id : null;
 
+  const c = await pool.connect();
   try {
-    await pool.query(`
+    await c.query('BEGIN');
+    // O número do protocolo é definido aqui: registro novo recebe o número pedido pelo aparelho se ele estiver livre;
+    // se já existir, recebe o próximo número livre do mesmo tipo e dia. Registro que já existe nunca muda de protocolo.
+    const existente = await c.query('SELECT protocolo FROM registros WHERE id = $1', [id]);
+    const protoFinal = existente.rows.length ? existente.rows[0].protocolo : await protocoloLivre(c, protocolo, op, at);
+    await c.query(`
       INSERT INTO registros (id, protocolo, op, at, controlador, patio, prod, dados, photos, usuario_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (id) DO UPDATE SET
-        protocolo = EXCLUDED.protocolo,
         op = EXCLUDED.op,
         at = EXCLUDED.at,
         controlador = EXCLUDED.controlador,
@@ -629,13 +634,32 @@ async function salvarRegistro(req, res, user) {
         prod = EXCLUDED.prod,
         dados = EXCLUDED.dados,
         photos = EXCLUDED.photos
-    `, [id, protocolo, op, new Date(at || Date.now()), controlador || '', patio || '', prod || 'aco', JSON.stringify(resto), JSON.stringify(photos || {}), usuarioId]);
+    `, [id, protoFinal, op, new Date(at || Date.now()), controlador || '', patio || '', prod || 'aco', JSON.stringify(resto), JSON.stringify(photos || {}), usuarioId]);
+    await c.query('COMMIT');
 
-    return json(res, 200, { ok: true, id });
+    return json(res, 200, { ok: true, id, protocolo: protoFinal });
   } catch (e) {
+    try { await c.query('ROLLBACK'); } catch (e2) {}
     console.error('Erro ao salvar registro no PostgreSQL:', e);
     return json(res, 500, { erro: 'Erro ao gravar no banco de dados.' });
+  } finally {
+    c.release();
   }
+}
+
+// Protocolo no formato ENT|RET-AAAAMMDD-NNNN, sem repetir número. Quem numera o mesmo tipo e dia é serializado por um lock.
+async function protocoloLivre(c, pedido, op, at) {
+  const m = /^(ENT|RET)-(\d{8})-(\d+)$/.exec(String(pedido || ''));
+  const pre = m ? m[1] : (op === 'ret' ? 'RET' : 'ENT');
+  const dia = m ? m[2] : new Date(at || Date.now()).toISOString().slice(0, 10).replace(/-/g, '');
+  const base = pre + '-' + dia + '-';
+  await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [base]);
+  if (m) {
+    const usado = await c.query('SELECT 1 FROM registros WHERE protocolo = $1 LIMIT 1', [pedido]);
+    if (!usado.rows.length) return pedido;
+  }
+  const mx = await c.query("SELECT COALESCE(MAX((regexp_match(protocolo, '-(\\d+)$'))[1]::int), 0) AS mx FROM registros WHERE protocolo LIKE $1", [base + '%']);
+  return base + String(mx.rows[0].mx + 1).padStart(4, '0');
 }
 
 async function excluirRegistro(req, res, user, id) {
@@ -680,7 +704,8 @@ function estatico(req, res) {
     const ext = path.extname(arq).toLowerCase();
     res.writeHead(200, {
       'content-type': MIME[ext] || 'application/octet-stream',
-      'cache-control': ext === '.html' || arq.endsWith('sw.js') ? 'no-cache' : 'public, max-age=3600',
+      // html e js sempre revalidam: o index.html novo exige o painel-calc.js novo, e uma cópia velha em cache quebraria o app
+      'cache-control': ext === '.html' || ext === '.js' || arq.endsWith('sw.js') ? 'no-cache' : 'public, max-age=3600',
       'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer',
       'permissions-policy': 'camera=(self), geolocation=()'
     });

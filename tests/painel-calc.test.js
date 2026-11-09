@@ -194,6 +194,48 @@ cenAp('período De 06/11', { de: '2026-11-06' }, r => r.at >= new Date(2026, 10,
 const op = PC.acoPronto(nL, {}, HOJE).opcoes;
 check('opções de filtro (elementos/locais) preenchidas', op.elementos.length > 5 && op.locais.length > 5 && op.bitolas.length > 3 && op.desenhos.length > 20, JSON.stringify([op.elementos.length, op.locais.length]));
 
+/* =============== 3b) Cargas =============== */
+secao('Cargas — registradas e estimadas');
+{
+  // (a) base real: cargas estimadas (nenhum registro tem o campo "carga"), conferidas por uma contagem feita à mão
+  const GAP = 30 * 60000, grupos = {};
+  registros.forEach(r => { const k = String(r.placa || '').toUpperCase() + '|' + r.op + '|' + r.patio; (grupos[k] = grupos[k] || []).push(new Date(r.at).getTime()); });
+  let esperado = 0;
+  Object.keys(grupos).forEach(k => { const ts = grupos[k].sort((a, b) => a - b); esperado += k.startsWith('|') ? ts.length : 1 + ts.slice(1).filter((t, i) => t - ts[i] > GAP).length; });
+  const pc = PC.painel(PC.normalizar(registros), {}, HOJE, { ultimasCargas: 9999 });
+  eq('cargas estimadas na base da planilha', pc.kpis.cargas, esperado);
+  eq('nenhuma carga registrada nos dados antigos', pc.kpis.cargasRegistradas, 0); eq('todas estimadas', pc.kpis.cargasEstimadas, esperado);
+  eq('Σ etiquetas das cargas = registros', pc.cargas.reduce((a, c) => a + c.etiquetas, 0), pc.kpis.registros);
+  eq('Σ peso das cargas = peso total', pc.cargas.reduce((a, c) => a + c.t, 0), pc.kpis.pesoT);
+  eq('etiquetas por carga (média)', pc.kpis.etiquetasPorCarga, pc.kpis.registros / esperado);
+  check('maior carga >= média', pc.kpis.maiorCarga >= pc.kpis.etiquetasPorCarga);
+  eq('Aço pronto também informa as cargas', PC.acoPronto(PC.normalizar(registros), {}, HOJE).kpis.cargas > 0 ? 1 : 0, 1);
+
+  // (b) casos sintéticos
+  const at = (h, m) => new Date(2026, 10, 7, h, m).toISOString();
+  const R = (id, hh, mm, extra) => ({ id, protocolo: 'ENT-X-' + id, op: 'mob', at: at(hh, mm), controlador: 'C', patio: 'Marabá', prod: 'aco', os: '1', desenho: 'D', posicao: id, cj: '1', elemento: 'PILAR', bitola: '16.0', aco: 'CA-50S', comp: 100, qtd: 10, m: 10, kg: 100, placa: 'AAA1A11', motorista: 'M', destino: 'CPRT', ...extra });
+  const sint = [];
+  for (let i = 1; i <= 15; i++) sint.push(R('a' + i, 8, i, { carga: 'X', placa: 'AAA1A11' }));          // carga registrada X (15 etiquetas)
+  for (let i = 1; i <= 3; i++) sint.push(R('b' + i, 9, i, { carga: 'Y', placa: 'BBB1B22', prod: 'barra' })); // carga registrada Y (3)
+  sint.push(R('c1', 10, 0, { placa: 'CCC1C33' }), R('c2', 10, 20, { placa: 'CCC1C33' }));                 // individuais, 20 min de intervalo: 1 carga estimada
+  sint.push(R('c3', 11, 0, { placa: 'CCC1C33' }));                                                         // 40 min depois: outra carga estimada
+  sint.push(R('d1', 10, 0, { placa: '' }), R('d2', 10, 1, { placa: '' }));                                // sem placa: cada um é uma carga
+  sint.push(R('e1', 10, 5, { placa: 'CCC1C33', op: 'ret' }));                                              // outra operação: outra carga
+  const ps = PC.painel(PC.normalizar(sint), {}, HOJE, { ultimasCargas: 9999 });
+  eq('sintético: total de cargas (2 registradas + 5 estimadas)', ps.kpis.cargas, 7);
+  eq('sintético: registradas', ps.kpis.cargasRegistradas, 2); eq('sintético: estimadas', ps.kpis.cargasEstimadas, 5);
+  eq('sintético: maior carga', ps.kpis.maiorCarga, 15);
+  const cx = ps.cargas.find(c => c.id === 'C:X'), cy = ps.cargas.find(c => c.id === 'C:Y');
+  eq('carga X: etiquetas', cx.etiquetas, 15); eq('carga X: peso (t)', cx.t, 1.5); check('carga X é registrada', cx.registrada === true);
+  eq('carga Y: produto', cy.produtos, 'Barra reta');
+  // filtro por produto: a carga continua contando uma vez, só com as etiquetas que passam no filtro
+  const pf = PC.painel(PC.normalizar(sint), { produto: 'Barra reta' }, HOJE, { ultimasCargas: 9999 });
+  eq('filtro de produto: cargas', pf.kpis.cargas, 1); eq('filtro de produto: etiquetas da carga', pf.cargas[0].etiquetas, 3);
+  // carga registrada não mistura com individual da mesma placa
+  const mix = PC.painel(PC.normalizar([R('m1', 8, 0, { carga: 'Z' }), R('m2', 8, 1, { carga: 'Z' }), R('m3', 8, 2, {})]), {}, HOJE);
+  eq('registrada + individual da mesma placa = 2 cargas', mix.kpis.cargas, 2);
+}
+
 /* =============== 4) Cordoalha =============== */
 secao('Cordoalha (produto extra do sistema)');
 const cord = registros.concat([

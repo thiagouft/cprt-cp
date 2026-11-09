@@ -1164,6 +1164,7 @@ function pnBody(R){
  const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  const kpis='<div class="pn-kpis">'+
   kp('Registros',nf(k.registros,0),'Placas: '+k.placas+' · Motoristas: '+k.motoristas)+
+  kp('Cargas',nf(k.cargas,0),'Média '+nf(k.etiquetasPorCarga,1)+' etiquetas / carga · maior '+nf(k.maiorCarga,0))+
   kp('Entradas',nf(k.entradas,0),nf(k.pesoEntT,2)+' t recebidas')+
   kp('Retiradas',nf(k.retiradas,0),nf(k.pesoRetT,2)+' t retiradas')+
   kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro')+
@@ -1193,11 +1194,16 @@ function pnBody(R){
  const trB=linhasB.concat([R.totalBitola]).map((b,i,a)=>'<tr'+(i===a.length-1?' class="tot"':'')+'><td class="nw"><b>'+esc(b.rotulo)+'</b></td><td class="r">'+nf(b.lotes,0)+'</td><td class="r">'+nf(b.barras,0)+'</td><td class="r">'+nf(b.metros,0)+'</td>'+R.produtos.map(p=>'<td class="r">'+nf(b.produtos[p],2)+'</td>').join('')+'<td class="r"><b>'+nf(b.t,2)+'</b></td></tr>').join('');
  const tabB='<h2 class="sec">Peso por produto e bitola (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Bitola</th><th class="r">Registros</th><th class="r">Unid. (barras)</th><th class="r">Metros</th>'+th+'<th class="r">Peso (t)</th></tr></thead><tbody>'+trB+'</tbody></table></div>';
 
+ // cargas mais recentes
+ const trC=R.cargas.map(c=>'<tr><td class="nw">'+esc(c.iniTxt)+'</td><td class="nw">'+(c.fimTxt!==c.iniTxt?esc(c.fimTxt):'—')+'</td><td class="nw"><b>'+esc(c.placa||'(sem placa)')+'</b></td><td>'+pillOp(c.operacao)+'</td><td class="nw">'+esc(c.patio)+'</td><td class="r"><b>'+nf(c.etiquetas,0)+'</b></td><td class="r">'+nf(c.t,2)+'</td><td class="nw">'+esc(c.produtos)+'</td><td class="nw">'+esc(c.motorista)+'</td><td>'+esc(c.local)+'</td><td class="nw"><span class="muted">'+(c.registrada?'Registrada':'Estimada')+'</span></td></tr>').join('');
+ const cargas='<h2 class="sec">Cargas mais recentes (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Início</th><th>Fim</th><th>Placa</th><th>Operação</th><th>Pátio</th><th class="r">Etiquetas</th><th class="r">Peso (t)</th><th>Produtos</th><th>Motorista</th><th>Localização</th><th>Origem</th></tr></thead><tbody>'+trC+'</tbody></table>'+
+  '<div class="hint muted" style="font-size:12.5px;margin-top:8px">Total no período: <b>'+nf(k.cargas,0)+'</b> cargas, sendo '+nf(k.cargasRegistradas,0)+' registradas pelo modo carga e '+nf(k.cargasEstimadas,0)+' estimadas. A carga estimada agrupa etiquetas da mesma placa, operação e pátio com até 30 minutos de intervalo entre elas (registros antigos e lançamentos individuais).</div></div>';
+
  // últimos registros
  const tr=R.ultimos.map(u=>'<tr><td><span class="pill '+(u.operacao==='Retirada'?'ret':'mob')+'">'+esc(u.operacao)+'</span></td><td class="nw"><b>'+esc(u.placa)+'</b></td><td class="nw">'+esc(u.data)+'</td><td>'+esc(u.hora)+'</td><td class="nw">'+esc(u.patio)+'</td><td class="nw">'+esc(u.produto)+'</td><td class="r">'+(u.bitola==null?'':nf(u.bitola,u.bitola%1?1:0))+'</td><td class="r">'+(u.produto==='Cordoalha'?'':nf(u.barras,0))+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.motorista)+'</td><td class="nw">'+esc(u.controlador)+'</td><td>'+esc(u.rua)+'</td></tr>').join('');
  const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Localização</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
 
- return '<div class="pn-sum">'+resumo+'</div>'+kpis+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+ult+
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+cargas+ult+
   '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.</div>';
 }
 function diasHtml(serie,janela,act,t7,tp){
@@ -1249,6 +1255,7 @@ function acBody(R){
  const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  const kpis='<div class="pn-kpis">'+
   kp('Etiquetas',nf(k.etiquetas,0),'Entradas: '+nf(k.entradas,0)+' · Retiradas: '+nf(k.retiradas,0))+
+  kp('Cargas',nf(k.cargas,0),'Média '+nf(k.etiquetasPorCarga,1)+' etiquetas de aço pronto / carga')+
   kp('Peso','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / etiqueta')+
   kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' m · comp. médio '+nf(k.compMedio,0)+' cm')+
   kp('Desenhos',nf(k.desenhos,0),nf(k.posicoes,0)+' posições (desenho + posição)')+
@@ -1460,12 +1467,24 @@ async function limpaAparelho(){ // roda depois de sincronizar e ao encerrar uma 
   });
  }catch(e){}finally{limpando=false;}
 }
+async function aplicaProtocolo(r,novo){ // o número pedido já existia no servidor: troca no registro, no aparelho e na tela
+ const antigo=r.protocolo;r.protocolo=novo;
+ try{const l=await DB.get(r.id);if(l){l.protocolo=novo;await DB.put(l);}}catch(e){}
+ S.records.forEach(x=>{if(x.id===r.id)x.protocolo=novo;});
+ if(S.done&&S.done.id===r.id)S.done.protocolo=novo;
+ toast('O protocolo '+antigo+' já estava em uso e foi trocado por '+novo+'. Se você já emitiu o comprovante, emita de novo.');
+ if((S.done&&S.done.id===r.id)||S.tab==='hist')render();
+}
 async function enviarRegistro(r){
  if(!Auth.token)return false;
  try{
   const {has_photos,...corpo}=r; // has_photos só existe nas listas vindas do servidor
   const res=await fetch('/api/registros',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(corpo)});
-  if(res.ok){Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);return true;}
+  if(res.ok){
+   let d=null;try{d=await res.json();}catch(e){}
+   if(d&&d.protocolo&&d.protocolo!==r.protocolo)await aplicaProtocolo(r,d.protocolo); // o servidor é quem garante que o número não se repete
+   Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);return true;
+  }
  }catch(e){}
  return false;
 }

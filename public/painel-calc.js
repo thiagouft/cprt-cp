@@ -102,7 +102,53 @@
   function normalizar(registros) {
     var out = [];
     for (var i = 0; i < registros.length; i++) out.push(linha(registros[i]));
+    atribuiCargas(out);
     return out;
+  }
+
+  /* ---------- Cargas ----------
+   * Carga = conjunto de etiquetas da mesma carreta. Registros feitos pelo modo carga trazem o campo `carga` (registrada).
+   * Para os demais (lançamentos individuais e registros antigos) a carga é ESTIMADA: mesma placa, operação e pátio,
+   * com no máximo GAP_CARGA minutos entre uma etiqueta e a seguinte. */
+  var GAP_CARGA = 30; // nos dados reais, 30 min dá cargas de 10 a 16 etiquetas em média; intervalos maiores juntam viagens diferentes
+  function atribuiCargas(linhas) {
+    var grupos = {}, ordem = [], i, L, k;
+    for (i = 0; i < linhas.length; i++) {
+      L = linhas[i];
+      if (L.carga) { L.cargaId = 'C:' + L.carga; L.cargaReg = true; continue; }
+      L.cargaReg = false;
+      if (!sobe(L.placa)) { L.cargaId = 'I:' + i; continue; } // sem placa: não dá para agrupar
+      k = sobe(L.placa) + '|' + L.operacao + '|' + L.patio;
+      if (!grupos[k]) { grupos[k] = []; ordem.push(k); }
+      grupos[k].push(L);
+    }
+    ordem.forEach(function (key) {
+      var g = ordenaEstavel(grupos[key], function (a, b) { return a.ts - b.ts; }), ult = null, id = null;
+      g.forEach(function (x) {
+        if (ult == null || x.ts - ult > GAP_CARGA) id = 'E:' + key + '|' + x.ts;
+        x.cargaId = id; ult = x.ts;
+      });
+    });
+  }
+  function resumoCargas(rows, limite) {
+    var mp = {}, ordem = [], i, L, g;
+    for (i = 0; i < rows.length; i++) {
+      L = rows[i]; g = mp[L.cargaId];
+      if (!g) {
+        g = mp[L.cargaId] = { id: L.cargaId, registrada: !!L.cargaReg, placa: L.placa, operacao: L.operacao, patio: L.patio, ini: L.ts, fim: L.ts, etiquetas: 0, kg: 0, motorista: L.motorista, local: L.local, produtos: {} };
+        ordem.push(L.cargaId);
+      }
+      g.etiquetas++; g.kg += L.kg; g.produtos[L.produto] = 1;
+      if (L.ts < g.ini) g.ini = L.ts;
+      if (L.ts > g.fim) g.fim = L.ts;
+    }
+    var lista = ordem.map(function (k) { return mp[k]; }), maior = 0, reg = 0;
+    lista.forEach(function (c) { if (c.etiquetas > maior) maior = c.etiquetas; if (c.registrada) reg++; });
+    var txt = function (ts) { return fmtData(Math.floor(ts / 1440)) + ' ' + fmtHora(ts % 1440); };
+    var top = ordenaEstavel(lista, function (a, b) { return b.fim - a.fim; }).slice(0, limite || 15).map(function (c) {
+      return { id: c.id, registrada: c.registrada, placa: c.placa, operacao: c.operacao, patio: c.patio, iniTxt: txt(c.ini), fimTxt: txt(c.fim), etiquetas: c.etiquetas, t: c.kg / 1000, motorista: c.motorista, local: c.local, produtos: Object.keys(c.produtos).join(' + ') };
+    });
+    return { total: lista.length, registradas: reg, estimadas: lista.length - reg, maior: maior, media: lista.length ? rows.length / lista.length : 0, lista: top };
   }
   function linha(r) {
     var d = new Date(r.at), cord = r.prod === 'cord';
@@ -121,6 +167,7 @@
       nf: (r.tem_nf || r.cargaNf || (r.photos && r.photos.notafiscal && r.photos.notafiscal.data) || r.nf === 'Sim') ? 'Sim' : 'Não'
     };
     L.local = ruaPadrao(L.destino);
+    L.carga = str(r.carga);
     L.campos = [L.protocolo, L.operacao, L.patio, L.produto, fmtData(dia), fmtHora(min), L.controlador, L.os, L.cod, L.cpt, L.material,
       L.descricao, L.corrida, L.feixe, L.lote, L.desenho, L.posicao, L.cj, L.elemento, bit == null ? '' : fmtNum(bit), L.aco,
       L.comp == null ? '' : fmtNum(L.comp), cord ? '' : fmtNum(L.barras), fmtNum(L.metros), fmtNum(L.kg), L.pbruto == null ? '' : fmtNum(L.pbruto),
@@ -213,6 +260,9 @@
       saldoT: (t.ent.kg - t.ret.kg) / 1000, barras: somar(E, function (x) { return x.barras; }), metros: somar(E, function (x) { return x.metros; }),
       placas: placas, motoristas: motoristas, mediaKg: E.length ? kg / E.length : 0
     };
+    var cg = resumoCargas(E, opc.ultimasCargas || 15);
+    kpis.cargas = cg.total; kpis.cargasRegistradas = cg.registradas; kpis.cargasEstimadas = cg.estimadas;
+    kpis.etiquetasPorCarga = cg.media; kpis.maiorCarga = cg.maior;
 
     // por pátio (com entradas/retiradas/saldo)
     var patios = PATIOS.slice();
@@ -251,7 +301,7 @@
     return {
       janela: { ini: lim.ini, fim: lim.fim, iniTxt: fmtData(lim.ini), fimTxt: fmtData(lim.fim), trocado: lim.trocado },
       kpis: kpis, porPatio: porPatio, produtos: prods, porBitola: porBitola, totalBitola: totalBitola, porControlador: porControlador,
-      serie: serieDias(E, lim.fim, opc.janela || 7, lim.ini), ultimos: ult,
+      serie: serieDias(E, lim.fim, opc.janela || 7, lim.ini), ultimos: ult, cargas: cg.lista,
       opcoes: opcoesPainel(linhas), totalBase: linhas.length
     };
   }
@@ -306,6 +356,8 @@
       mediaKg: E.length ? kg / E.length : 0, compMedio: barras ? somar(E, function (x) { return (x.comp || 0) * x.barras; }) / barras : 0,
       saldoT: (t.ent.kg - t.ret.kg) / 1000, saldoBarras: t.ent.barras - t.ret.barras, saldoEtiquetas: t.ent.n - t.ret.n
     };
+    var cgA = resumoCargas(E, 1);
+    kpis.cargas = cgA.total; kpis.etiquetasPorCarga = cgA.media;
     var porElemento = porChave(function (x) { return x.elemento; });
     kpis.maiorElemento = porElemento.length ? porElemento[0].chave : '-';
     var porDesenho = porChave(function (x) { return x.desenho; }, function (d) { return 'Des. ' + d; });

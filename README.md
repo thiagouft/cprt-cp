@@ -43,6 +43,8 @@ Menu **Painel** com duas visões, calculadas em tempo real sobre todos os regist
 - **Painel geral:** registros, entradas, retiradas, peso, barras, saldo no pátio, peso por dia, por pátio, por controlador, por bitola e produto (aço pronto, barra reta e cordoalha) e últimos registros.
 - **Aço pronto:** onde está o aço por pátio e Localização, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
 
+**Cargas:** o Painel mostra quantas cargas (carretas) passaram, as etiquetas por carga e a tabela das cargas mais recentes. Cargas feitas no modo carga são *registradas*; para registros antigos e lançamentos individuais a carga é *estimada* (mesma placa, operação e pátio, com até 30 minutos entre uma etiqueta e a seguinte).
+
 Filtros: busca de texto (em todos os campos ou em uma coluna), pátio, operação, produto, período (Hoje, 7 dias, 30 dias, todo o período) e datas De/Até livres.
 
 **Permissão:** o Painel só aparece para quem tem a permissão "Painel" (Usuários → *Permitir Painel*). Administradores têm acesso sempre; usuário comum não, por padrão. O servidor também bloqueia `GET /api/painel/base` sem a permissão.
@@ -62,6 +64,11 @@ O lançamento individual continua igual (**"Novo registro"**). Cada etiqueta con
 - **Fotos guardadas uma vez:** placa, crachá e nota ficam gravados só no 1º registro da carga; as demais etiquetas guardam só a foto da etiqueta e o campo `cargaFotosDe`, que aponta para o 1º registro. O servidor devolve as quatro fotos normalmente (detalhe do Histórico e comprovante). Se o 1º registro da carga for excluído, as fotos da carga passam automaticamente para a etiqueta seguinte. Cargas feitas antes dessa mudança continuam com as fotos em cada registro.
 - **Sem conexão:** o registro fica salvo no aparelho, aparece como pendente no Histórico e é reenviado ao voltar a conexão (ou em "Enviar agora").
 - **Retomar uma carga:** se o app fechar no meio, a tela inicial mostra "Há uma carga em andamento" com **Retomar carga** (vale por 12 horas, para o mesmo usuário). Também dá para abrir qualquer registro no Histórico e usar **"Adicionar etiqueta a esta carga"**: se o registro era individual, ele passa a ser a 1ª etiqueta da carga.
+
+## Protocolo
+O número do protocolo (`ENT|RET-AAAAMMDD-NNNN`) é garantido pelo servidor. O aparelho propõe o número (para funcionar sem internet); ao gravar, o servidor mantém o número se ele estiver livre e, se já existir, usa o próximo número livre do mesmo tipo e dia, e o app mostra um aviso com o número final. Um registro que já existe nunca muda de protocolo.
+
+Protocolos repetidos que já existiam no banco podem ser corrigidos com `node tools/corrigir-protocolos.js` (simulação por padrão; `--apply` grava, mantendo o número no registro mais antigo de cada grupo e salvando a lista antigo → novo em `backups/`).
 
 ## Armazenamento no celular
 As fotos de cada registro (cerca de 750 KB) ficam no aparelho só até o servidor confirmar o recebimento. Depois disso o registro local é enxugado (fica sem fotos, com miniatura) e os registros com mais de 7 dias já confirmados são apagados do aparelho; o servidor guarda tudo. Nunca são enxugados: registros pendentes de envio, registros que o servidor ainda não conhece e a 1ª etiqueta de uma carga aberta (para retomar sem internet). Ao abrir o app, os registros locais são lidos um por vez, sem as fotos, para não pesar a memória.
