@@ -474,8 +474,12 @@
       if (str(r.material).trim() && str(r.ordem).trim() && kg) return k(['C', op, r.material, r.ordem, kg]);
       return '';
     }
-    if (cod) return k(['A', op, cod]);
-    if (str(r.os).trim() && str(r.desenho).trim() && str(r.posicao).trim()) return k(['A', op, r.os, r.desenho, r.posicao, r.cj, r.bitola, r.comp, r.qtd]);
+    // Aço pronto: o "código da etiqueta" NÃO é único (nos dados reais um mesmo código aparece em dezenas de etiquetas de desenhos e pesos
+    // diferentes), então só é repetida quando TODOS os dados batem, inclusive o peso. Sem peso não há como comparar.
+    if (!kg) return '';
+    if (cod || (str(r.os).trim() && str(r.desenho).trim() && str(r.posicao).trim())) {
+      return k(['A', op, cod, r.os, r.desenho, r.posicao, r.cj, num(r.bitola), num(r.comp), num(r.qtd), kg]);
+    }
     return '';
   }
 
