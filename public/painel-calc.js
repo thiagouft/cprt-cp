@@ -475,10 +475,11 @@
       return '';
     }
     // Aço pronto: o "código da etiqueta" NÃO é único (nos dados reais um mesmo código aparece em dezenas de etiquetas de desenhos e pesos
-    // diferentes), então só é repetida quando TODOS os dados batem, inclusive o peso. Sem peso não há como comparar.
+    // diferentes), então só é repetida quando TODOS os dados batem, inclusive o CPT/CPM/DF (cada CPT é uma etiqueta/lote diferente, mesmo
+    // com desenho, posição, quantidade e peso iguais) e o peso. Sem peso não há como comparar.
     if (!kg) return '';
     if (cod || (str(r.os).trim() && str(r.desenho).trim() && str(r.posicao).trim())) {
-      return k(['A', op, cod, r.os, r.desenho, r.posicao, r.cj, num(r.bitola), num(r.comp), num(r.qtd), kg]);
+      return k(['A', op, cod, r.cpt, r.os, r.desenho, r.posicao, r.cj, num(r.bitola), num(r.comp), num(r.qtd), kg]);
     }
     return '';
   }

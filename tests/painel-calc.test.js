@@ -131,7 +131,9 @@ secao('Etiqueta repetida — chave de comparação');
   check('barra reta sem código nem corrida/feixe = sem chave (não compara)', K({ op: 'mob', prod: 'barra', kg: 500 }) === '');
   check('barra reta sem código usa corrida + feixe + peso', K({ op: 'mob', prod: 'barra', corrida: '27602/82', feixe: '017', kg: 900 }) === K({ op: 'mob', prod: 'barra', corrida: '27602/82', feixe: '017', kg: 900.001 }));
   // Aço pronto: o código da etiqueta é compartilhado por muitas etiquetas, então a comparação usa todos os dados + o peso
-  const aco = { op: 'mob', prod: 'aco', cod: '4512077408', os: '8', desenho: '252', posicao: '12', cj: '15', bitola: '12.5', comp: 78, qtd: 100, kg: 48.13 };
+  const aco = { op: 'mob', prod: 'aco', cod: '4512077408', cpt: 'CPT29J', os: '8', desenho: '252', posicao: '12', cj: '15', bitola: '12.5', comp: 78, qtd: 100, kg: 48.13 };
+  check('aço pronto: CPT diferente = outra etiqueta (mesmo código, desenho, posição, OS, CJ, comprimento, quantidade e peso)', K(aco) !== K({ ...aco, cpt: 'CPT003' }) && K(aco) === K({ ...aco, cpt: 'cpt29j' }));
+  check('CPT003 x CPT004 (caso real: 258/10, 552 cm, 100 barras, 871,056 kg, nº 4512077401)', K({ op: 'mob', prod: 'aco', cod: '4512077401', cpt: 'CPT003', os: '7', desenho: '258', posicao: '10', cj: '06', bitola: '16.0', comp: 552, qtd: 100, kg: 871.056 }) !== K({ op: 'mob', prod: 'aco', cod: '4512077401', cpt: 'CPT004', os: '7', desenho: '258', posicao: '10', cj: '06', bitola: '16.0', comp: 552, qtd: 100, kg: 871.056 }));
   check('aço pronto: tudo igual (inclusive o peso) = repetida', K(aco) !== '' && K(aco) === K({ ...aco, controlador: 'Outro', placa: 'XXX0X00', bitola: '12.50', comp: '78', qtd: '100', kg: '48,13' }));
   check('aço pronto: mesmo código, PESO diferente = outra etiqueta', K(aco) !== K({ ...aco, kg: 96.25 }));
   check('aço pronto: mesmo código e peso, quantidade diferente = outra etiqueta', K(aco) !== K({ ...aco, qtd: 200 }));
@@ -141,7 +143,7 @@ secao('Etiqueta repetida — chave de comparação');
   const acoSem = { op: 'mob', prod: 'aco', os: '8', desenho: '231-1', posicao: '20', cj: '13', bitola: '16.0', comp: 362, qtd: 50, kg: 100 };
   check('aço pronto sem código: OS + desenho + posição + CJ + bitola + comprimento + quantidade + peso', K(acoSem) !== '' && K(acoSem) !== K({ ...acoSem, qtd: 51 }) && K(acoSem) === K({ ...acoSem, qtd: '50' }));
   check('aço pronto sem código e sem desenho = sem chave', K({ op: 'mob', prod: 'aco', os: '8', kg: 100 }) === '');
-  // base real: com a chave só pelo código, 174 das 236 linhas de aço pronto com código seriam "repetidas"; com todos os dados e o peso sobram 34
+  // base real: com a chave só pelo código, 174 das 236 linhas de aço pronto com código seriam "repetidas"; com todos os dados, o CPT e o peso sobram 31
   {
     const apCod = registros.filter(r => r.prod === 'aco' && String(r.cod || '').trim());
     const cont = {}; apCod.forEach(r => { const k = K(r); cont[k] = (cont[k] || 0) + 1; });
@@ -149,7 +151,7 @@ secao('Etiqueta repetida — chave de comparação');
     const soCodigo = {}; apCod.forEach(r => { const k = String(r.cod); soCodigo[k] = (soCodigo[k] || 0) + 1; });
     const antigas = apCod.filter(r => soCodigo[String(r.cod)] > 1).length;
     eq('base real: linhas que a regra antiga (só código) marcaria como repetidas', antigas, 174);
-    eq('base real: linhas "a mais" com a regra nova (tudo + peso)', extras, 34);
+    eq('base real: linhas "a mais" com a regra nova (tudo + CPT + peso)', extras, 31);
   }
   check('cordoalha: código de barras', K({ op: 'mob', prod: 'cord', cod: '1065317351' }) === K({ op: 'mob', prod: 'cord', cod: '1065317351', kg: 1 }));
 }
