@@ -31,7 +31,9 @@ if (fs.existsSync(envPath)) {
 
 const PORT = Number(process.env.PORT || 3334);
 const KEY = process.env.ANTHROPIC_API_KEY || '';
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';   // modelo preciso (etiquetas e repetição das leituras que o barato errar)
+const MODEL_BARATO = process.env.ANTHROPIC_MODEL_CHEAP || 'claude-haiku-5-5';   // placa e crachá; use o mesmo valor de ANTHROPIC_MODEL para desligar
+const TIPOS_BARATOS = new Set(['placa', 'cracha']);
 const BASE = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
 const TOKEN = process.env.APP_TOKEN || '';
 const LIMITE_POR_MIN = Number(process.env.RATE_LIMIT_PER_MIN || 40);
@@ -194,6 +196,38 @@ function extrairJson(texto) {
   return JSON.parse(texto.slice(i, f + 1));
 }
 
+// Uma chamada ao modelo; devolve o JSON lido ou lança erro (provedor, resposta cortada ou sem JSON)
+async function chamaModelo(modelo, tipo, prompt, img, maxTokens, timeoutMs) {
+  const r = await fetch(BASE + '/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: modelo, max_tokens: maxTokens,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } },
+        { type: 'text', text: prompt }
+      ] }]
+    }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.detalhe = 'modelo=' + modelo + ' | ' + (await r.text()).slice(0, 300); throw e; }
+  const out = await r.json();
+  const texto = (out.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  try { return extrairJson(texto); }
+  catch (e) {
+    // Diagnóstico: o que a IA respondeu no lugar do JSON (foto ruim? recusa? resposta vazia?)
+    e.detalhe = 'modelo=' + modelo + ' | tipo=' + tipo + ' | stop_reason=' + (out.stop_reason || '?') + ' | foto=' + Math.round(img.length * 0.75 / 1024) + 'KB | resposta=' + JSON.stringify(texto.slice(0, 150));
+    throw e;
+  }
+}
+// A leitura barata só vale se trouxer o essencial; senão o modelo preciso refaz
+function leituraValida(tipo, p) {
+  if (!p || typeof p !== 'object') return false;
+  if (tipo === 'placa') return typeof p.placa === 'string' && /^[A-Z0-9]{7}$/.test(p.placa.toUpperCase());
+  if (tipo === 'cracha') return typeof p.motorista === 'string' && p.motorista.trim().length >= 3;
+  return false;
+}
+
 // Leitura de fotos com a Anthropic
 async function ler(req, res, user) {
   if (!KEY) return json(res, 503, { erro: 'Servidor sem ANTHROPIC_API_KEY configurada.' });
@@ -209,28 +243,17 @@ async function ler(req, res, user) {
   if (!prompt || !/^[A-Za-z0-9+/=]+$/.test(img) || img.length < 100) return json(res, 400, { erro: 'Requisição inválida.' });
 
   try {
-    const r = await fetch(BASE + '/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: MODEL, max_tokens: 700,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } },
-          { type: 'text', text: prompt }
-        ] }]
-      }),
-      signal: AbortSignal.timeout(45000)
-    });
-    if (!r.ok) { console.error('Anthropic HTTP', r.status, (await r.text()).slice(0, 300)); return json(res, 502, { erro: 'A leitura falhou no provedor.' }); }
-    const out = await r.json();
-    const texto = (out.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-    let parsed;
-    try { parsed = extrairJson(texto); }
-    catch (e) {
-      // Diagnóstico: o que a IA respondeu no lugar do JSON (foto ruim? recusa? resposta vazia?)
-      e.detalhe = 'tipo=' + dados.tipo + ' | stop_reason=' + (out.stop_reason || '?') + ' | foto=' + Math.round(img.length * 0.75 / 1024) + 'KB | resposta=' + JSON.stringify(texto.slice(0, 150));
-      throw e;
+    // Placa e crachá: modelo barato primeiro; se a resposta vier vazia, cortada ou inválida, repete no modelo preciso.
+    // Etiquetas (peso, OS, desenho) vão sempre direto ao modelo preciso.
+    let parsed = null;
+    if (MODEL_BARATO !== MODEL && TIPOS_BARATOS.has(dados.tipo)) {
+      try {
+        const p = await chamaModelo(MODEL_BARATO, dados.tipo, prompt, img, 2000, 25000);
+        if (leituraValida(dados.tipo, p)) parsed = p;
+        else console.log('Leitura barata inválida (' + dados.tipo + '): repetindo no modelo preciso.');
+      } catch (e) { console.log('Leitura barata falhou (' + dados.tipo + '): ' + e.message + ' — repetindo no modelo preciso.'); }
     }
+    if (!parsed) parsed = await chamaModelo(MODEL, dados.tipo, prompt, img, 700, 45000);
     if (dados && dados.tipo === 'cracha' && parsed && typeof parsed === 'object') {
       if (parsed.tipo_doc === 'rg' || parsed.registro_geral) {
         parsed.cracha = parsed.registro_geral || parsed.cracha || null;
