@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const PainelCalc = require(path.join(__dirname, 'public', 'painel-calc.js')); // mesma regra de etiqueta repetida do app
 
 // Carregar arquivo .env automaticamente caso exista
 const envPath = path.join(__dirname, '.env');
@@ -518,20 +519,53 @@ async function atualizarNomeUsuario(req, res, user, id) {
 }
 
 // Handlers de Registros no PostgreSQL
+
+// Filtros comuns da lista e da exportação: ?op=ret|mob &patio= &de=ISO &ate=ISO &q=texto &carga=id
+function filtrosRegistros(url) {
+  const sp = url.searchParams, where = [], params = [];
+  const add = (sql, v) => { params.push(v); where.push(sql.replace(/\?/g, '$' + params.length)); };
+  const op = sp.get('op'); if (op === 'ret' || op === 'mob') add('op = ?', op);
+  const patio = sp.get('patio'); if (patio) add('patio = ?', patio.slice(0, 100));
+  const de = sp.get('de'); if (de && !isNaN(Date.parse(de))) add('at >= ?::timestamptz', de);
+  const ate = sp.get('ate'); if (ate && !isNaN(Date.parse(ate))) add('at <= ?::timestamptz', ate);
+  const carga = sp.get('carga'); if (carga) add("(dados->>'carga' = ? OR id = ?)", carga.slice(0, 100));
+  const q = (sp.get('q') || '').trim().slice(0, 100);
+  if (q) {
+    // os mesmos campos que a busca do Histórico sempre usou
+    add(`concat_ws(' ', protocolo, patio, dados->>'placa', dados->>'motorista', dados->>'os', dados->>'desenho', dados->>'elemento', dados->>'destino', dados->>'cod', dados->>'cpt', dados->>'empresa', dados->>'material', dados->>'ordem', dados->>'descricao', dados->>'marca', dados->>'corrida', dados->>'feixe', dados->>'lote') ILIKE ?`, '%' + q.replace(/[\\%_]/g, '\\$&') + '%');
+  }
+  return { where, params };
+}
+
+// Lista por demanda (paginada): o Histórico pede poucos registros por vez, com a miniatura, em vez de trazer tudo de uma vez.
+// Parâmetros: limite (padrão 40, máx. 200), antes + antesId (cursor devolvido em "proximo") e os filtros acima.
 async function listarRegistros(req, res, user) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
   try {
+    const url = new URL(req.url, 'http://x'), sp = url.searchParams;
+    const { where, params } = filtrosRegistros(url);
+    const limite = Math.min(Math.max(parseInt(sp.get('limite'), 10) || 40, 1), 200);
+    const antes = sp.get('antes');
+    if (antes && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(antes)) {
+      params.push(antes); const a = params.length;
+      params.push(String(sp.get('antesId') || '').slice(0, 100)); const b = params.length;
+      where.push(`(at, id) < ($${a}::timestamptz, $${b})`);
+    }
     // Retorna dados essenciais e a miniatura (thumb) da etiqueta para preencher o quadrado da lista
     const r = await pool.query(`
-      SELECT 
-        id, protocolo, op, at, controlador, patio, prod, dados, 
+      SELECT
+        id, protocolo, op, at, controlador, patio, prod, dados,
+        to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at,
         (photos IS NOT NULL AND photos != '{}'::jsonb) AS has_photos,
         (photos->'notafiscal'->>'data' IS NOT NULL OR dados->>'cargaNf' = 'true') AS tem_nf,
         COALESCE(dados->>'thumb', photos->'etiqueta'->>'thumb', photos->'etiqueta'->>'data') AS thumb
-      FROM registros 
-      ORDER BY at DESC LIMIT 1000
-    `);
-    const registros = r.rows.map(row => {
+      FROM registros
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY at DESC, id DESC LIMIT ${limite + 1}
+    `, params);
+    const temMais = r.rows.length > limite;
+    const linhas = r.rows.slice(0, limite);
+    const registros = linhas.map(row => {
       const rec = Object.assign({}, row.dados, {
         id: row.id,
         protocolo: row.protocolo,
@@ -546,9 +580,87 @@ async function listarRegistros(req, res, user) {
       });
       return rec;
     });
-    return json(res, 200, { ok: true, registros });
+    const ult = linhas[linhas.length - 1];
+    const saida = { ok: true, registros, temMais, proximo: temMais && ult ? { at: ult.cursor_at, id: ult.id } : null };
+    // Maior número de protocolo já usado no dia pedido (o app numera o próximo sem precisar baixar o dia inteiro)
+    const dia = sp.get('dia');
+    if (dia && /^\d{8}$/.test(dia) && !antes) {
+      const m = await pool.query(
+        `SELECT left(protocolo, 3) AS pre, max(substring(protocolo from 14)::int) AS n
+           FROM registros WHERE protocolo ~ ('^(ENT|RET)-' || $1 || '-[0-9]{1,9}$') GROUP BY 1`, [dia]);
+      saida.protocolos = {};
+      m.rows.forEach(x => { saida.protocolos[x.pre] = x.n; });
+    }
+    return json(res, 200, saida);
   } catch (e) {
     console.error('Erro ao listar registros:', e);
+    return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
+// Exportação (CSV): todos os registros que passam nos filtros, sem fotos nem miniaturas e sem limite.
+async function exportarRegistros(req, res, user) {
+  if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
+  try {
+    const { where, params } = filtrosRegistros(new URL(req.url, 'http://x'));
+    const r = await pool.query(`
+      SELECT id, protocolo, op, at, controlador, patio, prod,
+             (dados - 'thumb' - 'photos') AS dados,
+             (photos->'notafiscal'->>'data' IS NOT NULL OR dados->>'cargaNf' = 'true') AS tem_nf
+      FROM registros
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY at ASC, id ASC
+    `, params);
+    const registros = r.rows.map(row => Object.assign({}, row.dados, {
+      id: row.id, protocolo: row.protocolo, op: row.op, at: row.at.toISOString(),
+      controlador: row.controlador, patio: row.patio, prod: row.prod, tem_nf: !!row.tem_nf
+    }));
+    return json(res, 200, { ok: true, total: registros.length, registros });
+  } catch (e) {
+    console.error('Erro ao exportar registros:', e);
+    return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
+// Aviso de etiqueta repetida: compara com TODA a base (mesma regra do painel-calc.js), sem o aparelho precisar baixar a lista.
+async function repetidaRegistro(req, res, user) {
+  if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
+  let r;
+  try { r = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
+  if (!r || typeof r !== 'object') return json(res, 400, { erro: 'Dados inválidos.' });
+  try {
+    const chave = PainelCalc.chaveEtiqueta(r);
+    if (!chave) return json(res, 200, { ok: true, igual: null });
+    const prod = r.prod === 'barra' || r.prod === 'cord' ? r.prod : 'aco';
+    const params = [String(r.op || ''), prod, String(r.id || '')], alt = [];
+    const addAlt = (campo, val) => { if (val != null && String(val).trim() !== '') { params.push(String(val).trim()); alt.push(`dados->>'${campo}' = $${params.length}`); } };
+    // pré-filtro barato pelos campos que entram na chave; a decisão final é da chaveEtiqueta
+    addAlt('cod', r.cod);
+    if (prod === 'barra') addAlt('corrida', r.corrida); else if (prod === 'cord') addAlt('material', r.material); else addAlt('desenho', r.desenho);
+    if (!alt.length) return json(res, 200, { ok: true, igual: null });
+    const q = await pool.query(
+      `SELECT id, protocolo, op, prod, at, controlador, dados FROM registros WHERE op = $1 AND prod = $2 AND id <> $3 AND (${alt.join(' OR ')}) ORDER BY at DESC LIMIT 500`, params);
+    for (const row of q.rows) {
+      const rec = Object.assign({}, row.dados, { id: row.id, protocolo: row.protocolo, op: row.op, prod: row.prod });
+      if (PainelCalc.chaveEtiqueta(rec) === chave) {
+        return json(res, 200, { ok: true, igual: { protocolo: row.protocolo, at: row.at.toISOString(), controlador: row.controlador } });
+      }
+    }
+    return json(res, 200, { ok: true, igual: null });
+  } catch (e) {
+    console.error('Erro ao conferir etiqueta repetida:', e);
+    return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
+// Localizações já usadas (para as sugestões do campo), das mais frequentes para as menos.
+async function listarLocalizacoes(req, res, user) {
+  if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
+  try {
+    const r = await pool.query(`SELECT dados->>'destino' AS nome, count(*)::int AS n FROM registros WHERE coalesce(dados->>'destino','') <> '' GROUP BY 1 ORDER BY n DESC LIMIT 300`);
+    return json(res, 200, { ok: true, localizacoes: r.rows });
+  } catch (e) {
+    console.error('Erro ao listar localizações:', e);
     return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
   }
 }
@@ -752,6 +864,9 @@ const server = http.createServer(async (req, res) => {
 
   // Registros
   if (p === '/api/painel/base' && req.method === 'GET') return baseDoPainel(req, res, user);
+  if (p === '/api/registros/exportar' && req.method === 'GET') return exportarRegistros(req, res, user);
+  if (p === '/api/registros/repetida' && req.method === 'POST') return repetidaRegistro(req, res, user);
+  if (p === '/api/localizacoes' && req.method === 'GET') return listarLocalizacoes(req, res, user);
   if (p === '/api/registros' && req.method === 'GET') return listarRegistros(req, res, user);
   if (p === '/api/registros' && req.method === 'POST') return salvarRegistro(req, res, user);
   if (p.startsWith('/api/registros/') && p.endsWith('/fotos') && req.method === 'GET') {

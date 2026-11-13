@@ -68,7 +68,6 @@ nav.tabs .in{max-width:760px;margin:0 auto;display:grid;gap:6px}
 .tab[aria-current="page"]{color:var(--primary);background:var(--surface2)}
 :root[data-theme="dark"] .tab[aria-current="page"]{color:var(--ink)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tab[aria-current="page"]{color:var(--ink)}}
-.tab .badge{position:absolute;top:3px;right:calc(50% - 24px);background:var(--accent);color:var(--accent-ink);border-radius:99px;font-size:11px;font-weight:700;padding:0 6px;min-width:18px;text-align:center}
 h2.sec{font-family:var(--font-d);font-size:15px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px;font-weight:700;display:flex;align-items:center;gap:8px}
 h2.sec .n{background:var(--ink);color:var(--surface);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:13px;letter-spacing:0}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
@@ -430,7 +429,7 @@ const Cfg={mem:{},get(k){try{return localStorage.getItem('cprt-aco-'+k)||this.me
 
 /* ============ estado ============ */
 const S={tab:'novo',op:null,photos:{etiqueta:null,placa:null,cracha:null,notafiscal:null},busy:{},form:{},errs:{},summary:null,
- records:[],filter:'all',q:'',day:'',limit:40,done:null,submitting:false,auto:{},ai:{},aiOff:false,prod:'aco',prodManual:false,from:'',to:'',range:'all',fp:'all',patio:'',usersList:[]};
+ records:[],hist:{ids:[],temMais:false,proximo:null,busy:false,fresco:false,erro:'',seq:0},protoMax:{},filter:'all',q:'',day:'',done:null,submitting:false,auto:{},ai:{},aiOff:false,prod:'aco',prodManual:false,from:'',to:'',range:'all',fp:'all',patio:'',usersList:[]};
 S.form.controlador=Auth.user?Auth.user.nome:Cfg.get('nome');
 S.patio=PATIOS.indexOf(Cfg.get('patio'))>-1?Cfg.get('patio'):'';
 
@@ -567,7 +566,7 @@ function renderTabs(){
   t.push(['usuarios','users','Usuários']);
  }
  $('#tabs').style.gridTemplateColumns='repeat('+t.length+',1fr)';
- $('#tabs').innerHTML=t.map(([k,i,l])=>'<button class="tab" data-act="tab" data-tab="'+k+'"'+(S.tab===k?' aria-current="page"':'')+'>'+ic(i)+'<span>'+l+'</span>'+(k==='hist'&&S.records.length?'<span class="badge">'+S.records.length+'</span>':'')+'</button>').join('');
+ $('#tabs').innerHTML=t.map(([k,i,l])=>'<button class="tab" data-act="tab" data-tab="'+k+'"'+(S.tab===k?' aria-current="page"':'')+'>'+ic(i)+'<span>'+l+'</span></button>').join('');
  $('#btn-settings').innerHTML=ic('gear');
  $('#btn-logout').innerHTML=ic('logout');
 }
@@ -872,43 +871,126 @@ async function cadastrarUsuario(){
  }
 }
 
+/* ============ Histórico sob demanda: o servidor entrega 40 por vez (com os filtros), o aparelho só guarda o que já viu ============ */
+const PAGINA=40;
+function hojeCompacto(){return dkey(new Date()).replace(/-/g,'');}
+function guardaNoCache(lista){ // S.records é só um cache do que já foi baixado (nunca é substituído por uma página filtrada)
+ const porId=new Map(S.records.map(r=>[r.id,r]));
+ lista.forEach(r=>{
+  const x=porId.get(r.id);
+  if(x){Object.assign(x,r);if(x.has_photos&&x.photos&&!Fila.ids().includes(x.id))delete x.photos;} // fotos pesadas ficam só no servidor
+  else{S.records.push(r);porId.set(r.id,r);}
+ });
+ S.records.sort((a,b)=>a.at<b.at?1:-1);
+}
+function casaFiltro(r){
+ const q=S.q.trim().toLowerCase();
+ return (S.filter==='all'||r.op===S.filter)&&(!S.from||dkey(r.at)>=S.from)&&(!S.to||dkey(r.at)<=S.to)&&(S.fp==='all'||r.patio===S.fp)&&(!q||[r.protocolo,r.placa,r.motorista,r.os,r.desenho,r.elemento,r.destino,r.cod,r.cpt,r.empresa,r.material,r.ordem,r.descricao,r.marca,r.corrida,r.feixe,r.lote,r.patio].join(' ').toLowerCase().includes(q));
+}
+function filtersHist(){ // mesmos filtros da tela, no formato que o servidor entende
+ const p=new URLSearchParams();
+ if(S.filter!=='all')p.set('op',S.filter);
+ if(S.fp!=='all')p.set('patio',S.fp);
+ if(S.from)p.set('de',new Date(S.from+'T00:00:00').toISOString());
+ if(S.to)p.set('ate',new Date(S.to+'T23:59:59.999').toISOString());
+ const q=S.q.trim();if(q)p.set('q',q);
+ return p;
+}
+function filtroPadrao(){return S.filter==='all'&&S.fp==='all'&&!S.from&&!S.to&&!S.q.trim();}
+function histLista(){ // o que a tela mostra: a página do servidor + o que ainda está só neste aparelho (aguardando envio)
+ const H=S.hist,ids=new Set(H.ids),fila=Fila.ids();
+ return S.records.filter(r=>(ids.has(r.id)&&(H.fresco||casaFiltro(r)))||(fila.indexOf(r.id)>-1&&casaFiltro(r)));
+}
+async function buscaPagina(p){
+ const res=await fetch('/api/registros?'+p.toString(),{headers:{'authorization':'Bearer '+Auth.token}});
+ if(!res.ok)throw new Error('http '+res.status);
+ const d=await res.json();
+ if(!d||!Array.isArray(d.registros))throw new Error('resposta inválida');
+ return d;
+}
+function atualizaLista(){ // redesenha só a lista do Histórico (não tira o foco da busca)
+ const n=$('#hlist');
+ if(n&&S.tab==='hist')n.innerHTML=histListaHtml();else if(S.tab==='hist')render();
+}
+async function carregaHistorico(reset){ // reset: recomeça com os filtros atuais; senão traz a próxima página
+ if(!Auth.token)return;
+ const H=S.hist;
+ if(!reset&&(H.busy||!H.proximo))return;
+ const seq=reset?++H.seq:H.seq,p=filtersHist();
+ p.set('limite',String(PAGINA));
+ if(!reset){p.set('antes',H.proximo.at);p.set('antesId',H.proximo.id);}
+ else H.fresco=false;
+ H.busy=true;H.erro='';
+ atualizaLista();
+ try{
+  const d=await buscaPagina(p);
+  if(seq!==H.seq)return; // os filtros mudaram enquanto carregava: esta resposta já não vale
+  guardaNoCache(d.registros);
+  if(reset)H.ids=[];
+  d.registros.forEach(r=>{if(H.ids.indexOf(r.id)<0)H.ids.push(r.id);});
+  H.temMais=!!d.temMais;H.proximo=d.proximo||null;H.fresco=true;
+ }catch(e){
+  if(seq===H.seq)H.erro=navigator.onLine===false?'Sem conexão. Mostrando só o que já foi carregado.':'Não foi possível carregar. Toque para tentar de novo.';
+ }finally{
+  if(seq===H.seq){H.busy=false;atualizaLista();}
+ }
+}
+let timerBusca=null;
+function mudouFiltro(adia){ // chamado quando busca, pátio, tipo ou período mudam
+ clearTimeout(timerBusca);
+ S.hist.fresco=false;
+ if(adia)timerBusca=setTimeout(()=>carregaHistorico(true),350);else carregaHistorico(true);
+}
+async function carregaItensCarga(cid){ // todas as etiquetas de uma carga (para contar e retomar)
+ if(!Auth.token||!cid)return;
+ try{
+  const res=await fetch('/api/registros?limite=200&carga='+encodeURIComponent(cid),{headers:{'authorization':'Bearer '+Auth.token}});
+  if(res.ok){const d=await res.json();if(d&&Array.isArray(d.registros))guardaNoCache(d.registros);}
+ }catch(e){}
+}
+async function carregaLocalizacoes(){
+ if(!Auth.token)return;
+ try{
+  const res=await fetch('/api/localizacoes',{headers:{'authorization':'Bearer '+Auth.token}});
+  if(res.ok){const d=await res.json();if(d&&Array.isArray(d.localizacoes))S.locais=d.localizacoes.map(x=>x.nome);}
+ }catch(e){}
+}
 async function sincronizarRegistrosComBanco(){
  if(!Auth.token)return;
  try{
-  const res=await fetch('/api/registros',{
-   headers:{'authorization':'Bearer '+Auth.token}
-  });
-  if(res.ok){
-   const data=await res.json();
-   if(data.registros&&Array.isArray(data.registros)){
-    // Guarda apenas os 50 registros mais recentes no IndexedDB local para manter o celular ultraleve
-    const recentes = data.registros.slice(0, 50), ativa = cargaAtivaId();
-    for(const r of recentes){
-     if(r.id===ativa)continue; // mantém completa a 1ª etiqueta da carga aberta (para retomar sem internet)
-     await DB.put(r);
-    }
-    S.srvIds=new Set(data.registros.map(r=>r.id));
-    S.records=data.registros.slice().sort((a,b)=>a.at<b.at?1:-1);
-    // registros ainda não confirmados pelo servidor continuam visíveis (e serão reenviados)
-    const fila=Fila.ids();
-    if(fila.length){
-     const locais=await DB.leves(x=>fila.indexOf(x.id)>-1);
-     locais.filter(x=>fila.indexOf(x.id)>-1&&!S.records.some(y=>y.id===x.id)).forEach(x=>S.records.push(x));
-     S.records.sort((a,b)=>a.at<b.at?1:-1);
-    }
-    limpaAparelho(); // enxuga o que o servidor já confirmou (em segundo plano)
-    // Para poupar memória RAM no celular, remove referências pesadas de fotos antigas da memória ativa
-    S.records.forEach(r=>{
-     if(r.has_photos&&r.photos) delete r.photos;
-    });
-    render();
-   }
+  // sempre traz a 1ª página sem filtro: é o que mantém o aparelho enxuto e atualizado
+  const p=new URLSearchParams();p.set('limite',String(PAGINA));p.set('dia',hojeCompacto());
+  const data=await buscaPagina(p);
+  // Guarda só esses registros mais recentes no IndexedDB local para manter o celular ultraleve
+  const ativa=cargaAtivaId();
+  for(const r of data.registros){
+   if(r.id===ativa)continue; // mantém completa a 1ª etiqueta da carga aberta (para retomar sem internet)
+   await DB.put({...r,_srv:true});
   }
+  if(!S.srvIds)S.srvIds=new Set();
+  data.registros.forEach(r=>S.srvIds.add(r.id));
+  if(data.protocolos)Object.keys(data.protocolos).forEach(k=>{S.protoMax[k+'-'+hojeCompacto()+'-']=data.protocolos[k];});
+  guardaNoCache(data.registros);
+  // registros ainda não confirmados pelo servidor continuam visíveis (e serão reenviados)
+  const fila=Fila.ids();
+  if(fila.length){
+   const locais=await DB.leves(x=>fila.indexOf(x.id)>-1);
+   guardaNoCache(locais.filter(x=>!S.records.some(y=>y.id===x.id)));
+  }
+  limpaAparelho(); // enxuga o que o servidor já confirmou (em segundo plano)
+  const cs=cargaSalva();if(cs)await carregaItensCarga(cs.id);
+  carregaLocalizacoes();
+  if(filtroPadrao()){ // sem filtros: a própria 1ª página já é a lista do Histórico
+   S.hist.seq++;S.hist.ids=data.registros.map(r=>r.id);S.hist.temMais=!!data.temMais;S.hist.proximo=data.proximo||null;S.hist.fresco=true;S.hist.erro='';S.hist.busy=false;
+   render();
+  }else{render();if(S.tab==='hist')carregaHistorico(true);}
  }catch(e){}
 }
 
 function vOps(){
- const today=S.records.filter(r=>dkey(r.at)===dkey(new Date())).length;
+ const hoje=S.records.filter(r=>dkey(r.at)===dkey(new Date())).length;
+ // só vem a página mais recente do servidor: se nenhum registro de dias anteriores foi visto, o número de hoje pode ser maior
+ const today=hoje&&!S.records.some(r=>dkey(r.at)<dkey(new Date())&&!Fila.ids().includes(r.id))&&S.records.length>=PAGINA?'mais de '+hoje:hoje;
  return cargaBanner()+'<h2 class="sec" style="margin-top:6px"><span class="n">1</span>Pátio e operação</h2>'+
  '<div class="card pad" style="margin-bottom:12px"><div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">Pátio</div><div class="seg" style="margin:0">'+PATIOS.map(p=>'<button class="chip" data-act="patio" data-p="'+esc(p)+'" aria-pressed="'+(S.patio===p)+'">'+esc(p)+'</button>').join('')+'</div></div>'+
  '<div class="ops">'+
@@ -953,7 +1035,7 @@ function fld(o){
 
 function ruasDatalist(){
  const vistos={};
- S.records.forEach(r=>{const n=PainelCalc.ruaPadrao(r.destino);if(n&&n!=='(sem local)')vistos[n]=1;});
+ (S.locais||[]).concat(S.records.map(r=>r.destino)).forEach(d=>{const n=PainelCalc.ruaPadrao(d);if(n&&n!=='(sem local)')vistos[n]=1;});
  return '<datalist id="dl-ruas">'+Object.keys(vistos).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>'<option value="'+esc(n)+'"></option>').join('')+'</datalist>';
 }
 
@@ -1068,10 +1150,7 @@ function vDone(){
   (emCarga?'':'<button class="btn pri" data-act="again">'+ic('check')+'Finalizar</button>')+'</div></div>';
 }
 
-function filtered(){
- const q=S.q.trim().toLowerCase();
- return S.records.filter(r=>(S.filter==='all'||r.op===S.filter)&&(!S.from||dkey(r.at)>=S.from)&&(!S.to||dkey(r.at)<=S.to)&&(S.fp==='all'||r.patio===S.fp)&&(!q||[r.protocolo,r.placa,r.motorista,r.os,r.desenho,r.elemento,r.destino,r.cod,r.cpt,r.empresa,r.material,r.ordem,r.descricao,r.marca,r.corrida,r.feixe,r.lote,r.patio].join(' ').toLowerCase().includes(q)));
-}
+function filtered(){return S.records.filter(casaFiltro);}
 function recItem(r){
  const thImg=r.thumb||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.thumb)||(r.photos&&r.photos.etiqueta&&r.photos.etiqueta.data)||'';
  const thHtml=thImg?'<img src="'+thImg+'" alt="">':ic('tag');
@@ -1082,19 +1161,25 @@ function recItem(r){
 function patioChips(mb){
  return '<div class="chips"'+(mb?' style="margin-bottom:'+mb+'px"':'')+'>'+[['all','Todos os pátios']].concat(PATIOS.map(p=>[p,'Pátio '+p])).map(([k,l])=>'<button class="chip" data-act="fpatio" data-p="'+esc(k)+'" aria-pressed="'+(S.fp===k)+'">'+esc(l)+'</button>').join('')+'</div>';
 }
+function histListaHtml(){
+ const H=S.hist,list=histLista();
+ if(!list.length){
+  if(H.busy)return '<div class="note" style="text-align:center">Carregando…</div>';
+  if(H.erro)return '<div class="card empty" style="text-align:center;padding:24px"><b>'+esc(H.erro)+'</b><div class="row mt"><button class="btn" data-act="more">Tentar de novo</button></div></div>';
+  return '<div class="card empty" style="text-align:center;padding:24px"><div class="ei" style="margin-bottom:8px">'+ic('list')+'</div><b>'+(filtroPadrao()?'Nenhum registro encontrado':'Nenhum registro com esses filtros')+'</b><div style="margin-top:4px" class="muted">'+(filtroPadrao()?'Os registros cadastrados no pátio aparecerão aqui.':'Troque o período, o pátio ou limpe a busca.')+'</div></div>';
+ }
+ return '<div id="reclist">'+list.map(recItem).join('')+'</div>'+
+  (H.busy?'<div class="note" style="text-align:center;margin-top:8px">Carregando…</div>':H.erro?'<button class="btn block" data-act="more">'+esc(H.erro)+'</button>':H.temMais?'<button class="btn block" data-act="more">Mostrar mais</button>':'')+
+  '<div class="row mt"><button class="btn" data-act="csv">'+ic('download')+'Exportar CSV</button></div>';
+}
 function vHist(){
- const list=filtered(),show=list.slice(0,S.limit),tot=list.reduce((a,r)=>a+(r.kg||0),0);
- const per=(S.from||S.to)?' · '+(S.from?fdate(S.from+'T12:00:00'):'início')+' a '+(S.to?fdate(S.to+'T12:00:00'):'hoje'):'';
  return '<div class="toolbar"><div class="search">'+ic('search')+'<input id="q" type="search" placeholder="Buscar placa, motorista, OS, protocolo" value="'+esc(S.q)+'" aria-label="Buscar registros"></div>'+
  '<div class="chips">'+[['all','Todos'],['ret','Retirada'],['mob','Entrada']].map(([k,l])=>'<button class="chip" data-act="filter" data-f="'+k+'" aria-pressed="'+(S.filter===k)+'">'+l+'</button>').join('')+'</div>'+
  patioChips(0)+
  '<div class="chips">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['all','Todo o período']].map(([k,l])=>'<button class="chip" data-act="range" data-r="'+k+'" aria-pressed="'+(S.range===k)+'">'+l+'</button>').join('')+'</div>'+
  '<div class="row"><div class="f"><label for="dfrom">De</label><input id="dfrom" type="date" value="'+esc(S.from)+'"></div><div class="f"><label for="dto">Até</label><input id="dto" type="date" value="'+esc(S.to)+'"></div></div></div>'+
  (Fila.ids().length?'<div class="alert" style="margin:0 0 12px"><b>'+Fila.ids().length+(Fila.ids().length===1?' registro aguardando':' registros aguardando')+' envio ao servidor.</b> Eles estão salvos neste aparelho e serão enviados quando houver conexão. <button class="btn sm" style="margin-top:8px" data-act="reenviar">Enviar agora</button></div>':'')+
- '<div class="note" style="margin-bottom:12px"><b>'+list.length+'</b> '+(list.length===1?'registro':'registros')+' · <b>'+nf(tot/1000,2)+' t</b>'+esc(per)+'</div>'+
- (list.length?'<div id="reclist">'+show.map(recItem).join('')+'</div>'+(list.length>show.length?'<button class="btn block" data-act="more">Mostrar mais ('+(list.length-show.length)+')</button>':'')+
-   '<div class="row mt"><button class="btn" data-act="csv">'+ic('download')+'Exportar CSV ('+list.length+')</button></div>':
-  '<div class="card empty" style="text-align:center;padding:24px"><div class="ei" style="margin-bottom:8px">'+ic('list')+'</div><b>'+(S.records.length?'Nenhum registro com esses filtros':'Nenhum registro encontrado')+'</b><div style="margin-top:4px" class="muted">'+(S.records.length?'Troque o período, o pátio ou limpe a busca.':'Os registros cadastrados no pátio aparecerão aqui.')+'</div></div>');
+ '<div id="hlist">'+histListaHtml()+'</div>';
 }
 
 /* ============ Painel (dashboard dinâmico) ============ */
@@ -1400,6 +1485,22 @@ async function saveFile(filename,text,mime){
   sheet('Exportar CSV','<p class="muted" style="margin-top:0">Copie o texto e cole em uma planilha ou arquivo .csv.</p><textarea class="exp" id="exp" readonly>'+esc(text)+'</textarea>','<div class="row mt"><button class="btn pri" data-act="copyexp">'+ic('copy')+'Copiar tudo</button></div>');
  }else toast('Download indisponível neste navegador.');
 }
+async function exportarCsv(todos){ // o servidor entrega TODOS os registros que casam com os filtros (não só os já vistos)
+ let lista=null;
+ toast('Preparando o CSV…');
+ try{
+  const res=await fetch('/api/registros/exportar?'+(todos?'':filtersHist().toString()),{headers:{'authorization':'Bearer '+Auth.token}});
+  if(!res.ok)throw new Error('http '+res.status);
+  const d=await res.json();
+  lista=d.registros;
+  const ja=new Set(lista.map(r=>r.id)),fila=Fila.ids(); // o que ainda está só neste aparelho também entra
+  S.records.filter(r=>fila.indexOf(r.id)>-1&&!ja.has(r.id)&&(todos||casaFiltro(r))).forEach(r=>lista.push(r));
+ }catch(e){
+  lista=todos?S.records:filtered();
+  toast('Sem conexão com o servidor: o CSV só tem os registros já carregados neste aparelho.');
+ }
+ saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(lista),'text/csv');
+}
 function csvOf(list){
  const H=['Protocolo','Operação','Pátio','Produto','Data','Hora','Controlador','OS / Ordem de produção','Código etiqueta / barras','CPT/CPM/DF','Material','Descrição / Marca','Corrida','Feixe','Lote','Desenho','Posição','CJ','Elemento','Bitola / Diâmetro (mm)','Aço / Classe','Comp. (cm)','Barras','Metros / Metragem','Peso (kg)','Peso bruto (kg)','Torção','Resistência','Norma','Data fabricação','RE','Placa','Motorista','Empresa','Crachá','Localização','Autorizado/Solicitado por','Observações','Nota Fiscal'];
  const q=v=>{v=v==null?'':String(v);return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
@@ -1423,7 +1524,7 @@ function comprovanteHtml(r){
 /* ============ ações ============ */
 function nextProto(op){
  const pre=OPS[op].pre,d=dkey(new Date()).replace(/-/g,''),base=pre+'-'+d+'-';
- let mx=0;S.records.forEach(r=>{if(r.protocolo.indexOf(base)===0)mx=Math.max(mx,parseInt(r.protocolo.slice(base.length),10)||0)});
+ let mx=S.protoMax[base]||0;S.records.forEach(r=>{if(r.protocolo.indexOf(base)===0)mx=Math.max(mx,parseInt(r.protocolo.slice(base.length),10)||0)});
  return base+String(mx+1).padStart(4,'0');
 }
 function resetForm(){
@@ -1454,16 +1555,16 @@ function semFotos(r){ // cópia leve: sem fotos, mas com miniatura e o aviso de 
 }
 function cargaAtivaId(){return (S.carga&&S.carga.id)||(cargaSalva()||{}).id||'';}
 async function enxugaLocal(r){ // chamado logo após o servidor confirmar o envio
- try{if(r&&r.photos&&r.id!==cargaAtivaId())await DB.put(semFotos(r));}catch(e){}
+ try{if(r&&r.id!==cargaAtivaId())await DB.put({...semFotos(r),_srv:true});}catch(e){}   // _srv: o servidor já confirmou este registro
 }
 let limpando=false;
 async function limpaAparelho(){ // roda depois de sincronizar e ao encerrar uma carga
- if(limpando||!S.srvIds)return;
+ if(limpando)return;
  limpando=true;
  try{
   const fila=Fila.ids(),ativa=cargaAtivaId(),limite=Date.now()-7*86400000;
   await DB.enxuga(r=>{
-   if(fila.indexOf(r.id)>-1||!S.srvIds.has(r.id))return;   // pendente ou ainda desconhecido pelo servidor: nunca mexe
+   if(fila.indexOf(r.id)>-1||!(r._srv||(S.srvIds&&S.srvIds.has(r.id))))return;   // pendente ou ainda desconhecido pelo servidor: nunca mexe
    if(r.id!==ativa&&r.carga!==ativa&&new Date(r.at).getTime()<limite)return null;   // já está no servidor há mais de 7 dias
    if(r.photos&&r.id!==ativa)return semFotos(r);
   });
@@ -1480,12 +1581,14 @@ async function aplicaProtocolo(r,novo){ // o número pedido já existia no servi
 async function enviarRegistro(r){
  if(!Auth.token)return false;
  try{
-  const {has_photos,...corpo}=r; // has_photos só existe nas listas vindas do servidor
+  const {has_photos,tem_nf,_srv,...corpo}=r; // só existem nas listas vindas do servidor / marcas locais
   const res=await fetch('/api/registros',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(corpo)});
   if(res.ok){
    let d=null;try{d=await res.json();}catch(e){}
    if(d&&d.protocolo&&d.protocolo!==r.protocolo)await aplicaProtocolo(r,d.protocolo); // o servidor é quem garante que o número não se repete
-   Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);return true;
+   Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);
+   if(S.hist&&S.hist.ids.indexOf(r.id)<0&&casaFiltro(r))S.hist.ids.push(r.id); // continua na lista do Histórico depois de sair da fila
+   return true;
   }
  }catch(e){}
  return false;
@@ -1575,6 +1678,20 @@ function cargaResumoHtml(it){
   it.map((x,i)=>'<tr><td>'+(i+1)+'</td><td class="nw">'+esc(x.protocolo)+'</td><td class="nw">'+esc(prodName(x))+'</td><td>'+esc(desc(x))+'</td><td class="r">'+nf(x.kg||0,1)+'</td></tr>').join('')+'</tbody></table></div>';
 }
 
+async function acharRepetida(r,chave){ // consulta o servidor (todo o histórico); sem conexão, olha o que há neste aparelho
+ const local=S.records.find(x=>x.id!==r.id&&PainelCalc.chaveEtiqueta(x)===chave);
+ if(local)return local;
+ if(!Auth.token)return null;
+ try{
+  const {photos,thumb,...dados}=r;
+  const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),6000);
+  const res=await fetch('/api/registros/repetida',{method:'POST',signal:ctl.signal,headers:{'content-type':'application/json','authorization':'Bearer '+Auth.token},body:JSON.stringify(dados)});
+  clearTimeout(t);
+  if(res.ok){const d=await res.json();if(d&&d.igual)return d.igual;}
+ }catch(e){}
+ return null;
+}
+
 async function submit(){
  if(S.submitting)return;
  const v=validate();S.errs=v.e;S.summary=v.msgs;
@@ -1592,7 +1709,7 @@ async function submit(){
  // Etiqueta que parece já registrada (mesma operação): avisa e deixa o controlador decidir
  const chave=PainelCalc.chaveEtiqueta(r);
  if(chave){
-  const igual=S.records.find(x=>x.id!==r.id&&PainelCalc.chaveEtiqueta(x)===chave);
+  const igual=await acharRepetida(r,chave);
   if(igual&&!(await confirmBox('Esta etiqueta parece já registrada: '+igual.protocolo+' em '+fdt(igual.at)+(igual.controlador?' ('+igual.controlador+')':'')+'. Registrar mesmo assim?','Registrar mesmo assim'))){S.submitting=false;return;}
  }
  if(S.carga){
@@ -1737,8 +1854,8 @@ document.addEventListener('click',async ev=>{
  if(a==='pn-janela'){PX.janela=t.dataset.j==='periodo'?'periodo':7;render();return;}
  if(a==='op'){if(!S.patio){toast('Escolha o pátio antes de continuar.');return;}S.op=t.dataset.op;S.done=null;render();topo();return;}
  if(a==='patio'){S.patio=t.dataset.p;Cfg.set('patio',S.patio);updateSub();render();return;}
- if(a==='fpatio'){S.fp=t.dataset.p;S.limit=40;render();return;}
- if(a==='range'){const r=t.dataset.r,td=new Date();S.range=r;if(r==='all'){S.from='';S.to='';}else if(r==='today'){S.from=S.to=dkey(td);}else{const f=new Date();f.setDate(f.getDate()-(Number(r)-1));S.from=dkey(f);S.to=dkey(td);}S.limit=40;render();return;}
+ if(a==='fpatio'){S.fp=t.dataset.p;render();mudouFiltro();return;}
+ if(a==='range'){const r=t.dataset.r,td=new Date();S.range=r;if(r==='all'){S.from='';S.to='';}else if(r==='today'){S.from=S.to=dkey(td);}else{const f=new Date();f.setDate(f.getDate()-(Number(r)-1));S.from=dkey(f);S.to=dkey(td);}render();mudouFiltro();return;}
  if(a==='prod'){S.prod=t.dataset.p;S.prodManual=true;delete S.auto.prod;renderDados();return;}
  if(a==='resetop'){
   if(S.carga){
@@ -1809,6 +1926,7 @@ document.addEventListener('click',async ev=>{
  if(a==='resumecarga'){
   const c=cargaSalva();if(!c){render();return;}
   toast('Carregando a carga…');
+  await carregaItensCarga(c.id);
   const ids=[c.id].concat(S.records.filter(x=>x.carga===c.id&&x.id!==c.id).map(x=>x.id));
   const ph=await fotosDaCarga(ids);
   if(!ph){toast('Não foi possível carregar as fotos da carga. Verifique a conexão e tente de novo.');return;}
@@ -1820,6 +1938,7 @@ document.addEventListener('click',async ev=>{
   const cid=r.carga||r.id;
   if(S.carga&&S.carga.id!==cid&&!(await confirmBox('Já existe uma carga em andamento ('+S.carga.base.placa+'). Trocar para a carga de '+r.placa+'? As etiquetas já salvas continuam salvas.','Trocar de carga')))return;
   closeLayer();toast('Carregando a carga…');
+  await carregaItensCarga(cid);
   const ph=await fotosDaCarga([r.id,r.cargaFotosDe||r.carga].filter(Boolean));
   if(!ph){toast('Não foi possível carregar as fotos deste registro. Verifique a conexão e tente de novo.');return;}
   if(!r.carga){
@@ -1834,8 +1953,8 @@ document.addEventListener('click',async ev=>{
  }
  if(a==='reenviar'){toast('Enviando registros pendentes…');await reenviarPendentes();await sincronizarRegistrosComBanco();render();return;}
  if(a==='gohist'){S.tab='hist';render();topo();sincronizarRegistrosComBanco();return;}
- if(a==='filter'){S.filter=t.dataset.f;S.limit=40;render();return;}
- if(a==='more'){S.limit+=40;render();return;}
+ if(a==='filter'){S.filter=t.dataset.f;render();mudouFiltro();return;}
+ if(a==='more'){carregaHistorico(S.hist.erro&&!S.hist.proximo);return;}
  if(a==='open'){openRecord(t.dataset.id);return;}
  if(a==='closelayer'){closeLayer();return;}
  if(a==='delete'){
@@ -1876,8 +1995,8 @@ document.addEventListener('click',async ev=>{
   }
   return;
  }
- if(a==='csv'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(filtered()),'text/csv');return;}
- if(a==='csv-all'){saveFile('controle-aco-'+dkey(new Date())+'.csv',csvOf(S.records),'text/csv');return;}
+ if(a==='csv'){exportarCsv(false);return;}
+ if(a==='csv-all'){exportarCsv(true);return;}
  if(a==='copyexp'){const ta=$('#exp');try{await navigator.clipboard.writeText(ta.value);toast('Copiado.');}catch(e){ta.select();toast('Selecione e copie (Ctrl+C).');}return;}
  async function salvarNomeUsuario(id, novoNome, btnEl){
   if(!novoNome || novoNome.length < 2){
@@ -2013,7 +2132,8 @@ document.addEventListener('click',async ev=>{
    fetch('/api/auth/logout',{method:'POST',headers:{'authorization':'Bearer '+Auth.token}}).catch(()=>{});
    Auth.clear();
    pnReset();
-   S.records=[];
+   S.records=[];S.locais=[];S.protoMax={};S.srvIds=null;
+   clearTimeout(timerBusca);S.hist={ids:[],temMais:false,proximo:null,busy:false,fresco:false,erro:'',seq:S.hist.seq+1};
    S.tab='novo';
    S.op=null;
    S.done=null;
@@ -2129,13 +2249,13 @@ document.addEventListener('change',ev=>{
  if(t.dataset&&t.dataset.pf){if(t.dataset.pf!=='busca')pnFiltro(t);return;}
  if(t.dataset&&t.dataset.af){if(t.dataset.af!=='busca')acFiltro(t);return;}
  if(t.dataset&&t.dataset.cap){onCapture(t);return;}
- if(t.id==='dfrom'||t.id==='dto'){if(t.id==='dfrom')S.from=t.value;else S.to=t.value;S.range='custom';S.limit=40;render();}
+ if(t.id==='dfrom'||t.id==='dto'){if(t.id==='dfrom')S.from=t.value;else S.to=t.value;S.range='custom';render();mudouFiltro();}
 });
 document.addEventListener('input',ev=>{
  const t=ev.target;
  if(t.dataset&&t.dataset.pf==='busca'){pnFiltro(t);return;}
  if(t.dataset&&t.dataset.af==='busca'){acFiltro(t);return;}
- if(t.id==='q'){S.q=t.value;S.limit=40;const pos=t.selectionStart;render();const n=$('#q');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}return;}
+ if(t.id==='q'){S.q=t.value;atualizaLista();mudouFiltro(true);return;}   // mostra já o que casa no aparelho e busca no servidor após uma pausa na digitação
  const k=t.dataset&&t.dataset.k;if(!k)return;
  let v=t.value;
  if(k==='placa'){v=v.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,7);t.value=v;}
