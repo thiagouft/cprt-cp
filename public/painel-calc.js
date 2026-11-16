@@ -168,6 +168,7 @@
     };
     L.local = ruaPadrao(L.destino);
     L.carga = str(r.carga);
+    L.chaveEst = chaveEtiqueta(Object.assign({}, r, { op: '' })); // identifica a etiqueta física, igual para a entrada e a retirada dela
     L.campos = [L.protocolo, L.operacao, L.patio, L.produto, fmtData(dia), fmtHora(min), L.controlador, L.os, L.cod, L.cpt, L.material,
       L.descricao, L.corrida, L.feixe, L.lote, L.desenho, L.posicao, L.cj, L.elemento, bit == null ? '' : fmtNum(bit), L.aco,
       L.comp == null ? '' : fmtNum(L.comp), cord ? '' : fmtNum(L.barras), fmtNum(L.metros), fmtNum(L.kg), L.pbruto == null ? '' : fmtNum(L.pbruto),
@@ -319,12 +320,31 @@
   }
 
   /* ---------- AÇO PRONTO ---------- */
+  // Estoque por etiqueta: em ordem cronológica, cada retirada tira do estoque a entrada MAIS ANTIGA da mesma etiqueta (mesmos dados e peso).
+  // Fica em estoque o que entrou e ainda não teve retirada correspondente. Entradas sem dados para identificar a etiqueta (sem chave)
+  // são mantidas; retiradas sem entrada correspondente (ou sem chave) são ignoradas e contadas no aviso.
+  function estoquePorEtiqueta(ap) {
+    var ord = ap.slice().sort(function (a, b) { return a.ts - b.ts; }), fila = {}, i, x, q, semChave = 0, orfas = 0, casadas = 0, fora = {};
+    for (i = 0; i < ord.length; i++) {
+      x = ord[i];
+      if (!x.chaveEst) { if (x.operacao === 'Retirada') orfas++; else if (x.operacao === 'Entrada') semChave++; continue; }
+      q = fila[x.chaveEst] || (fila[x.chaveEst] = []);
+      if (x.operacao === 'Entrada') q.push(x);
+      else if (x.operacao === 'Retirada') { if (q.length) { fora[q.shift().id] = true; casadas++; } else orfas++; }
+    }
+    return {
+      lista: ap.filter(function (y) { return y.operacao === 'Entrada' && !fora[y.id]; }),
+      info: { casadas: casadas, retiradasSemEntrada: orfas, entradasSemChave: semChave }
+    };
+  }
   function acoPronto(linhas, f, hoje, opc) {
     f = f || {}; opc = opc || {};
     var lim = limites(linhas, f, hoje), ap = linhas.filter(function (x) { return x.produto === 'Aço pronto'; }), i, L;
-    var E = ap.filter(function (L2) {
+    var modoSaldo = f.operacao === 'Saldo', est = null, base = ap;
+    if (modoSaldo) { est = estoquePorEtiqueta(ap); base = est.lista; }
+    var E = base.filter(function (L2) {
       return (todos(f.patio, 'Todos os pátios') || igual(L2.patio, f.patio)) &&
-        (todos(f.operacao, 'Todas') || igual(L2.operacao, f.operacao)) &&
+        (modoSaldo || todos(f.operacao, 'Todas') || igual(L2.operacao, f.operacao)) &&
         (todos(f.elemento, 'Todos') || igual(L2.elemento, f.elemento)) &&
         (todos(f.desenho, 'Todos') || igual(L2.desenho, f.desenho)) &&
         (todos(f.cpt, 'Todos') || igual(L2.cpt, f.cpt)) &&
@@ -441,7 +461,7 @@
       kpis: kpis, porElemento: porElemento, topElementos: porElemento.slice(0, 8), topDesenhos: porDesenho.slice(0, 10), porBitola: porBitola,
       bitolas: bits, serie: serieDias(E, lim.fim, opc.janela || 7, lim.ini), matriz: matriz, matrizTotais: totM, matrizTotal: totG,
       onde: onde, saldoLocal: saldoLocal, resumoDesenhos: resumo,
-      semDesenho: { etiquetas: semDesenho.length, t: somar(semDesenho, function (x) { return x.kg; }) / 1000, saldoT: (semDesenhoTot.ent.kg - semDesenhoTot.ret.kg) / 1000 }, ultimas: ultimas, opcoes: opcoesAco(ap), totalAcoPronto: ap.length
+      semDesenho: { etiquetas: semDesenho.length, t: somar(semDesenho, function (x) { return x.kg; }) / 1000, saldoT: (semDesenhoTot.ent.kg - semDesenhoTot.ret.kg) / 1000 }, ultimas: ultimas, opcoes: opcoesAco(ap), totalAcoPronto: ap.length, modoSaldo: modoSaldo, estoque: est && est.info
     };
   }
   function opcoesAco(ap) {
@@ -449,7 +469,7 @@
     var pat = PATIOS.slice();
     ap.forEach(function (x) { if (x.patio && pat.indexOf(x.patio) < 0) pat.push(x.patio); });
     return {
-      patios: ['Todos os pátios'].concat(pat.sort(cmpTxt)), operacoes: ['Todas', 'Entrada', 'Retirada'], periodos: PERIODOS.slice(),
+      patios: ['Todos os pátios'].concat(pat.sort(cmpTxt)), operacoes: ['Todas', 'Entrada', 'Retirada', 'Saldo'], periodos: PERIODOS.slice(),
       elementos: ['Todos'].concat(uniq(function (x) { return x.elemento; })), desenhos: ['Todos'].concat(uniq(function (x) { return x.desenho; })),
       cpts: ['Todos'].concat(uniq(function (x) { return x.cpt; })),
       bitolas: ['Todas'].concat(ap.map(function (x) { return x.bitola; }).filter(function (b, i, a) { return b != null && b > 0 && a.indexOf(b) === i; }).sort(function (a, b) { return a - b; })),

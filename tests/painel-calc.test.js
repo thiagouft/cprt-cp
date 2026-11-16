@@ -269,5 +269,32 @@ const so = PC.painel(PC.normalizar(cord), { produto: 'Cordoalha' }, HOJE);
 eq('filtro produto Cordoalha · registros', so.kpis.registros, 2); eq('filtro produto Cordoalha · saldo t', so.kpis.saldoT, 3);
 check('cordoalha fora do Aço pronto', PC.acoPronto(PC.normalizar(cord), {}, HOJE).kpis.etiquetas === 247);
 
+/* =============== 5) Aço pronto · modo "Saldo" (estoque por etiqueta) =============== */
+secao('Aço pronto · modo Saldo');
+{
+  const dia = (d, h) => new Date(2026, 10, d, h, 0).toISOString();
+  const AP = (id, op, d, h, extra) => Object.assign({ id, protocolo: id, op, at: dia(d, h), controlador: 'T', patio: 'Marabá', prod: 'aco', os: '1', cod: '4512', cpt: 'CPT1', desenho: '250', posicao: '1', cj: '1', elemento: 'LAJES', bitola: 16, aco: 'CA-50S', comp: 100, qtd: 10, m: 10, kg: 100, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' }, extra || {});
+  const L = PC.normalizar([
+    AP('e1', 'mob', 1, 8), AP('r1', 'ret', 2, 8),                                   // etiqueta A: entrou e saiu
+    AP('e2', 'mob', 1, 9, { posicao: '2', kg: 200 }),                               // etiqueta B: segue no pátio
+    AP('e3', 'mob', 1, 10, { posicao: '3', kg: 300 }), AP('r3', 'ret', 2, 9, { posicao: '3', kg: 300 }), AP('e3b', 'mob', 3, 8, { posicao: '3', kg: 300 }), // C: entrou, saiu, entrou de novo
+    AP('r9', 'ret', 2, 10, { posicao: '9', kg: 900 }),                              // retirada sem entrada
+    AP('e4', 'mob', 1, 11, { posicao: '4', kg: 0 })                                 // entrada sem peso: não dá para identificar
+  ]);
+  const todos = PC.acoPronto(L, { operacao: 'Todas' }, HOJE), s = PC.acoPronto(L, { operacao: 'Saldo' }, HOJE);
+  check('opção "Saldo" existe em Operação', todos.opcoes.operacoes.includes('Saldo'), JSON.stringify(todos.opcoes.operacoes));
+  eq('Todas: saldo continua entradas − retiradas (t)', todos.kpis.saldoT, (100 + 200 + 300 + 300 + 0 - 100 - 300 - 900) / 1000);
+  eq('Saldo: etiquetas em estoque (B, C reentrada e a sem peso)', s.kpis.etiquetas, 3);
+  eq('Saldo: peso em estoque (t)', s.kpis.saldoT, (200 + 300 + 0) / 1000);
+  eq('Saldo: não há retiradas na lista', s.kpis.retiradas, 0);
+  check('Saldo: a etiqueta que saiu não aparece', !s.ultimas.some(u => u.protocolo === 'e1'));
+  check('Saldo: a reentrada aparece, a entrada antiga não', s.ultimas.some(u => u.protocolo === 'e3b') && !s.ultimas.some(u => u.protocolo === 'e3'));
+  eq('Saldo: etiquetas casadas', s.estoque.casadas, 2); eq('Saldo: retiradas sem entrada', s.estoque.retiradasSemEntrada, 1); eq('Saldo: entradas sem chave', s.estoque.entradasSemChave, 1);
+  check('Saldo respeita os outros filtros (desenho inexistente = vazio)', PC.acoPronto(L, { operacao: 'Saldo', desenho: '999' }, HOJE).kpis.etiquetas === 0);
+  check('Saldo: período filtra pela data da entrada', PC.acoPronto(L, { operacao: 'Saldo', de: '2026-11-03', ate: '2026-11-03' }, HOJE).kpis.etiquetas === 1);
+  check('modoSaldo só ligado em Saldo', s.modoSaldo === true && todos.modoSaldo === false && !todos.estoque);
+  check('Entrada/Retirada continuam filtrando normalmente', PC.acoPronto(L, { operacao: 'Retirada' }, HOJE).kpis.etiquetas === 3 && PC.acoPronto(L, { operacao: 'Entrada' }, HOJE).kpis.etiquetas === 5);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

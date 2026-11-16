@@ -41,7 +41,7 @@ Acesse no navegador:
 ## Painel
 Menu **Painel** com duas visões, calculadas em tempo real sobre todos os registros do banco (mesmas colunas do Histórico e do CSV):
 - **Painel geral:** registros, entradas, retiradas, peso, barras, saldo no pátio, peso por dia, por pátio, por controlador, por bitola e produto (aço pronto, barra reta e cordoalha) e últimos registros.
-- **Aço pronto:** onde está o aço por pátio e Localização, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
+- **Aço pronto:** histórico do aço por pátio e Localização, saldo (entradas − retiradas) por local e por desenho, peso por elemento/desenho/bitola, matriz elemento × bitola, resumo por desenho e últimas etiquetas.
 
 **Cargas:** o Painel mostra quantas cargas (carretas) passaram, as etiquetas por carga e a tabela das cargas mais recentes. Cargas feitas no modo carga são *registradas*; para registros antigos e lançamentos individuais a carga é *estimada* (mesma placa, operação e pátio, com até 30 minutos entre uma etiqueta e a seguinte).
 

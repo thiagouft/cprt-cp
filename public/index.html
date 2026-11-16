@@ -269,7 +269,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=31"></script>
+<script src="painel-calc.js?v=33"></script>
 <script>
 (function(){
 'use strict';
@@ -1246,7 +1246,7 @@ function pnBody(R){
  if(PX.carregando&&!PX.linhas.length)return '<div class="note mt">Carregando dados do banco…</div>';
  if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
  if(!R.totalBase)return '<div class="card empty pn-empty mt"><div class="ei" style="margin-bottom:8px">'+ic('chart')+'</div><b>Nenhum registro na base</b><div class="muted" style="margin-top:4px">Os indicadores aparecem assim que houver registros.</div></div>';
- const k=R.kpis,f=PX.f,j=R.janela;
+ const k=R.kpis,f=PX.f,j=R.janela,semSaldo=f.operacao==='Entrada'||f.operacao==='Retirada'; // saldo = entradas − retiradas: só faz sentido com as duas na conta
  const resumo='<b>'+nf(k.registros,0)+'</b> '+(k.registros===1?'registro':'registros')+' · <b>'+nf(k.pesoT,2)+' t</b> · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
  const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  const kpis='<div class="pn-kpis">'+
@@ -1256,7 +1256,7 @@ function pnBody(R){
   kp('Retiradas',nf(k.retiradas,0),nf(k.pesoRetT,2)+' t retiradas')+
   kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro')+
   kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' metros')+
-  kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>','Entradas − Retiradas',pnSaldoCls(k.saldoT))+'</div>';
+  (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>','Entradas − Retiradas',pnSaldoCls(k.saldoT)))+'</div>';
  if(!k.registros)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhum registro com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
  // peso por dia (retirada x entrada)
@@ -1264,7 +1264,7 @@ function pnBody(R){
 
  // por pátio
  const mp=Math.max(0.0001,...R.porPatio.map(p=>p.t));
- const patio='<div><h2 class="sec">Peso por pátio (t)</h2><div class="card pad">'+R.porPatio.map(p=>hbar(esc(p.patio),p.t,mp,null,nf(p.registros,0)+' registros · Entradas '+nf(p.entT,2)+' t · Retiradas '+nf(p.retT,2)+' t · Saldo <b class="'+pnSaldoCls(p.saldoT)+'">'+nf(p.saldoT,2)+' t</b>')).join('')+'</div></div>';
+ const patio='<div><h2 class="sec">Peso por pátio (t)</h2><div class="card pad">'+R.porPatio.map(p=>hbar(esc(p.patio),p.t,mp,null,nf(p.registros,0)+' registros · Entradas '+nf(p.entT,2)+' t · Retiradas '+nf(p.retT,2)+' t'+(semSaldo?'':' · Saldo <b class="'+pnSaldoCls(p.saldoT)+'">'+nf(p.saldoT,2)+' t</b>'))).join('')+'</div></div>';
 
  // por controlador
  const mc=Math.max(0.0001,...R.porControlador.map(c=>c.t));
@@ -1338,35 +1338,37 @@ function acBody(R){
  if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
  if(!R.totalAcoPronto)return '<div class="card empty pn-empty mt"><div class="ei" style="margin-bottom:8px">'+ic('tag')+'</div><b>Nenhuma etiqueta de aço pronto na base</b><div class="muted" style="margin-top:4px">Esta visão mostra somente o produto Aço pronto.</div></div>';
  const k=R.kpis,f=AX.f,j=R.janela;
- const resumo='Somente produto Aço pronto · <b>'+nf(k.etiquetas,0)+'</b> '+(k.etiquetas===1?'etiqueta':'etiquetas')+' · <b>'+nf(k.pesoT,2)+' t</b> · <b>'+nf(k.desenhos,0)+'</b> '+(k.desenhos===1?'desenho':'desenhos')+' · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
+ const mSaldo=!!R.modoSaldo,semSaldo=f.operacao==='Entrada'||f.operacao==='Retirada'; // Entrada/Retirada: sem saldo; Saldo: só o que ainda está no pátio
+ const resumo='Somente produto Aço pronto ·<b>'+nf(k.etiquetas,0)+'</b> '+(k.etiquetas===1?'etiqueta':'etiquetas')+' · <b>'+nf(k.pesoT,2)+' t</b> · <b>'+nf(k.desenhos,0)+'</b> '+(k.desenhos===1?'desenho':'desenhos')+' · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
  const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  const kpis='<div class="pn-kpis">'+
-  kp('Etiquetas',nf(k.etiquetas,0),'Entradas: '+nf(k.entradas,0)+' · Retiradas: '+nf(k.retiradas,0))+
+  kp(mSaldo?'Etiquetas em estoque':'Etiquetas',nf(k.etiquetas,0),mSaldo?'Entraram e ainda não saíram':'Entradas: '+nf(k.entradas,0)+' · Retiradas: '+nf(k.retiradas,0))+
   kp('Cargas',nf(k.cargas,0),'Média '+nf(k.etiquetasPorCarga,1)+' etiquetas de aço pronto / carga')+
   kp('Peso','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / etiqueta')+
   kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' m · comp. médio '+nf(k.compMedio,0)+' cm')+
   kp('Desenhos',nf(k.desenhos,0),nf(k.posicoes,0)+' posições (desenho + posição)')+
   kp('Ordens (OS)',nf(k.os,0),nf(k.cj,0)+' conjuntos (CJ)')+
   kp('Elementos',nf(k.elementos,0),'Maior peso: '+esc(k.maiorElemento))+
-  kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',nf(k.saldoBarras,0)+' barras · '+nf(k.saldoEtiquetas,0)+' etiquetas (entradas − retiradas)',pnSaldoCls(k.saldoT))+'</div>';
- if(!k.etiquetas)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhuma etiqueta com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
+  (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',nf(k.saldoBarras,0)+' barras · '+nf(k.saldoEtiquetas,0)+' etiquetas ('+(mSaldo?'estoque por etiqueta':'entradas − retiradas')+')',pnSaldoCls(k.saldoT)))+'</div>';
+ const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas que entraram e ainda não tiveram retirada correspondente (mesmos dados e peso; cada retirada tira a entrada mais antiga da mesma etiqueta). '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas.':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
+ if(!k.etiquetas)return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+'<div class="card empty pn-empty mt"><b>Nenhuma etiqueta com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
  // onde está o aço (Operação | Pátio | Localização)
  const trO=R.onde.map(o=>'<tr><td>'+pillOp(o.operacao)+'</td><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.etiquetas,0)+'</td><td class="r">'+nf(o.desenhos,0)+'</td><td class="r">'+nf(o.barras,0)+'</td><td class="r"><b>'+nf(o.t,2)+'</b></td><td class="r">'+nf(o.pct*100,1)+'%</td><td class="nw">'+esc(o.ultimaTxt)+'</td><td style="min-width:200px">'+esc(o.principais)+'</td></tr>').join('');
- const onde='<h2 class="sec">Onde está o aço pronto — por pátio e localização (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Pátio</th><th>Localização</th><th class="r">Etiquetas</th><th class="r">Desenhos</th><th class="r">Barras</th><th class="r">Peso (t)</th><th class="r">% peso</th><th>Última mov.</th><th>Principais desenhos (maior peso primeiro)</th></tr></thead><tbody>'+trO+'</tbody></table></div>';
+ const onde='<h2 class="sec">Histórico do aço pronto — por pátio e localização (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Pátio</th><th>Localização</th><th class="r">Etiquetas</th><th class="r">Desenhos</th><th class="r">Barras</th><th class="r">Peso (t)</th><th class="r">% peso</th><th>Última mov.</th><th>Principais desenhos (maior peso primeiro)</th></tr></thead><tbody>'+trO+'</tbody></table></div>';
 
  // saldo por pátio e localização
  const sl=R.saldoLocal,sT=(a)=>sl.reduce((x,o)=>x+o[a],0);
  const trS=sl.map(o=>'<tr><td class="nw">'+esc(o.patio)+'</td><td class="nw"><b>'+esc(o.local)+'</b></td><td class="r">'+nf(o.entEtiquetas,0)+'</td><td class="r">'+nf(o.retEtiquetas,0)+'</td><td class="r">'+nf(o.entBarras,0)+'</td><td class="r">'+nf(o.retBarras,0)+'</td><td class="r">'+nf(o.entT,2)+'</td><td class="r">'+nf(o.retT,2)+'</td><td class="r"><b>'+sinal(o.saldoBarras,0)+'</b></td><td class="r"><b>'+sinal(o.saldoT,2)+'</b></td></tr>').join('')+
   '<tr class="tot"><td colspan="2">Total</td><td class="r">'+nf(sT('entEtiquetas'),0)+'</td><td class="r">'+nf(sT('retEtiquetas'),0)+'</td><td class="r">'+nf(sT('entBarras'),0)+'</td><td class="r">'+nf(sT('retBarras'),0)+'</td><td class="r">'+nf(sT('entT'),2)+'</td><td class="r">'+nf(sT('retT'),2)+'</td><td class="r">'+sinal(sT('saldoBarras'),0)+'</td><td class="r">'+sinal(sT('saldoT'),2)+'</td></tr>';
- const saldo='<h2 class="sec">Saldo por pátio e localização — entradas − retiradas</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Pátio</th><th>Localização</th><th class="r">Etiq. entrada</th><th class="r">Etiq. retirada</th><th class="r">Barras entrada</th><th class="r">Barras retirada</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo barras</th><th class="r">Saldo (t)</th></tr></thead><tbody>'+trS+'</tbody></table></div>';
+ const saldo=semSaldo?'':'<h2 class="sec">Saldo por pátio e localização — '+(mSaldo?'estoque por etiqueta':'entradas − retiradas')+'</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Pátio</th><th>Localização</th><th class="r">Etiq. entrada</th><th class="r">Etiq. retirada</th><th class="r">Barras entrada</th><th class="r">Barras retirada</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo barras</th><th class="r">Saldo (t)</th></tr></thead><tbody>'+trS+'</tbody></table></div>';
 
  // gráficos
  const mE=Math.max(0.0001,...R.topElementos.map(e=>e.t)),mD=Math.max(0.0001,...R.topDesenhos.map(e=>e.t)),mB=Math.max(0.0001,...R.porBitola.map(e=>e.t));
- const subSaldo=e=>nf(e.etiquetas,0)+' etiquetas · '+nf(e.barras,0)+' barras · Saldo <b class="'+pnSaldoCls(e.saldoT)+'">'+nf(e.saldoT,2)+' t</b>';
+ const subSaldo=e=>nf(e.etiquetas,0)+' etiquetas · '+nf(e.barras,0)+' barras'+(semSaldo?'':' · Saldo <b class="'+pnSaldoCls(e.saldoT)+'">'+nf(e.saldoT,2)+' t</b>');
  const gEl='<div><h2 class="sec">Peso por elemento (t) — top 8</h2><div class="card pad">'+R.topElementos.map(e=>hbar(esc(e.rotulo),e.t,mE,null,subSaldo(e))).join('')+'</div></div>';
  const gDe='<div><h2 class="sec">Top 10 desenhos por peso (t)</h2><div class="card pad">'+(R.topDesenhos.length?R.topDesenhos.map(e=>hbar(esc(e.rotulo),e.t,mD,null,subSaldo(e))).join(''):'<div class="muted">Sem desenho informado.</div>')+'</div></div>';
- const gBi='<div><h2 class="sec">Peso e barras por bitola</h2><div class="card pad">'+R.porBitola.filter(b=>b.t>0||b.barras>0).map(b=>hbar(esc(b.rotulo),b.t,mB,null,nf(b.barras,0)+' barras · Saldo <b class="'+pnSaldoCls(b.saldoT)+'">'+nf(b.saldoT,2)+' t</b>')).join('')+'</div></div>';
+ const gBi='<div><h2 class="sec">Peso e barras por bitola</h2><div class="card pad">'+R.porBitola.filter(b=>b.t>0||b.barras>0).map(b=>hbar(esc(b.rotulo),b.t,mB,null,nf(b.barras,0)+' barras'+(semSaldo?'':' · Saldo <b class="'+pnSaldoCls(b.saldoT)+'">'+nf(b.saldoT,2)+' t</b>'))).join('')+'</div></div>';
  const gDi=diasHtml(R.serie,AX.janela,'ac-janela','Aço pronto movimentado nos 7 dias até a data final (t)','Aço pronto movimentado por dia no período (t)');
 
  // matriz elemento x bitola
@@ -1377,17 +1379,17 @@ function acBody(R){
  const matriz='<h2 class="sec">Matriz elemento × bitola — peso (t)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Elemento</th>'+R.bitolas.map(b=>'<th class="r">'+PainelCalc.fmtNum(b)+' mm</th>').join('')+'<th class="r">Total (t)</th><th class="r">% do peso</th></tr></thead><tbody>'+trM+'</tbody></table><div class="hint muted" style="font-size:12.5px;margin-top:8px">Cada célula mostra o peso (t) do elemento naquela bitola, já com todos os filtros aplicados. Quanto mais azul, maior o peso. Use os filtros de Desenho ou CPT para ver a composição de uma peça específica.</div></div>';
 
  // resumo por desenho
- const trD=R.resumoDesenhos.map(r=>'<tr><td class="nw"><b>'+esc(r.desenho)+'</b></td><td class="nw">'+esc(r.cpt)+'</td><td>'+esc(r.elementos)+'</td><td class="r">'+nf(r.nOS,0)+'</td><td class="r">'+nf(r.posicoes,0)+'</td><td class="nw">'+esc(r.bitolas)+'</td><td class="r">'+nf(r.etiquetas,0)+'</td><td class="r">'+nf(r.barras,0)+'</td><td class="r">'+nf(r.metros,0)+'</td><td class="r"><b>'+nf(r.t,2)+'</b></td><td class="r">'+nf(r.pct*100,1)+'%</td><td class="r">'+nf(r.entT,2)+'</td><td class="r">'+nf(r.retT,2)+'</td><td class="r"><b>'+sinal(r.saldoT,2)+'</b></td><td class="r">'+sinal(r.saldoBarras,0)+'</td><td class="nw">'+esc(r.ultimaTxt)+'</td><td style="min-width:200px">'+esc(r.locais)+'</td><td style="min-width:260px">'+esc(r.obs)+'</td></tr>').join('');
+ const trD=R.resumoDesenhos.map(r=>'<tr><td class="nw"><b>'+esc(r.desenho)+'</b></td><td class="nw">'+esc(r.cpt)+'</td><td>'+esc(r.elementos)+'</td><td class="r">'+nf(r.nOS,0)+'</td><td class="r">'+nf(r.posicoes,0)+'</td><td class="nw">'+esc(r.bitolas)+'</td><td class="r">'+nf(r.etiquetas,0)+'</td><td class="r">'+nf(r.barras,0)+'</td><td class="r">'+nf(r.metros,0)+'</td><td class="r"><b>'+nf(r.t,2)+'</b></td><td class="r">'+nf(r.pct*100,1)+'%</td><td class="r">'+nf(r.entT,2)+'</td><td class="r">'+nf(r.retT,2)+'</td>'+(semSaldo?'':'<td class="r"><b>'+sinal(r.saldoT,2)+'</b></td><td class="r">'+sinal(r.saldoBarras,0)+'</td>')+'<td class="nw">'+esc(r.ultimaTxt)+'</td><td style="min-width:200px">'+esc(r.locais)+'</td><td style="min-width:260px">'+esc(r.obs)+'</td></tr>').join('');
  const sd=R.semDesenho;
- const resD='<h2 class="sec">Resumo por desenho — top '+R.resumoDesenhos.length+' por peso (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Desenho</th><th>CPT/CPM/DF</th><th>Elemento</th><th class="r">Nº OS</th><th class="r">Posições</th><th>Bitolas (mm)</th><th class="r">Etiquetas</th><th class="r">Barras</th><th class="r">Metros</th><th class="r">Peso (t)</th><th class="r">% peso</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th><th class="r">Saldo (t)</th><th class="r">Saldo barras</th><th>Última mov.</th><th>Localização (pátio · local)</th><th>Ordens de produção · observação</th></tr></thead><tbody>'+trD+'</tbody></table>'+
-  (sd.etiquetas?'<div class="hint muted" style="font-size:12.5px;margin-top:8px">'+nf(sd.etiquetas,0)+' etiquetas sem desenho informado ('+nf(sd.t,2)+' t, saldo '+nf(sd.saldoT,2)+' t) não aparecem neste resumo, mas entram nos totais acima.</div>':'')+'</div>';
+ const resD='<h2 class="sec">Resumo por desenho — top '+R.resumoDesenhos.length+' por peso (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Desenho</th><th>CPT/CPM/DF</th><th>Elemento</th><th class="r">Nº OS</th><th class="r">Posições</th><th>Bitolas (mm)</th><th class="r">Etiquetas</th><th class="r">Barras</th><th class="r">Metros</th><th class="r">Peso (t)</th><th class="r">% peso</th><th class="r">Entrada (t)</th><th class="r">Retirada (t)</th>'+(semSaldo?'':'<th class="r">Saldo (t)</th><th class="r">Saldo barras</th>')+'<th>Última mov.</th><th>Localização (pátio · local)</th><th>Ordens de produção · observação</th></tr></thead><tbody>'+trD+'</tbody></table>'+
+  (sd.etiquetas?'<div class="hint muted" style="font-size:12.5px;margin-top:8px">'+nf(sd.etiquetas,0)+' etiquetas sem desenho informado ('+nf(sd.t,2)+' t'+(semSaldo?'':', saldo '+nf(sd.saldoT,2)+' t')+') não aparecem neste resumo, mas entram nos totais acima.</div>':'')+'</div>';
 
  // últimas etiquetas
  const trU=R.ultimas.map(u=>'<tr><td class="nw">'+esc(u.data)+' '+esc(u.hora)+'</td><td class="nw">'+esc(u.os)+'</td><td>'+pillOp(u.operacao)+'</td><td class="nw">'+esc(u.cpt)+'</td><td class="nw"><b>'+esc(u.desenho)+'</b></td><td class="nw">'+esc(u.posicao)+'</td><td class="nw">'+esc(u.cj)+'</td><td class="nw">'+esc(u.elemento)+'</td><td class="r">'+(u.bitola==null?'':PainelCalc.fmtNum(u.bitola))+'</td><td class="r">'+(u.comp==null?'':nf(u.comp,0))+'</td><td class="r">'+nf(u.barras,0)+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.local)+'</td><td style="min-width:200px">'+esc(u.obs)+'</td></tr>').join('');
  const ult='<h2 class="sec">Últimas '+R.ultimas.length+' etiquetas de aço pronto (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Data / hora</th><th>OS</th><th>Operação</th><th>CPT/CPM/DF</th><th>Desenho</th><th>Posição</th><th>CJ</th><th>Elemento</th><th class="r">Bitola</th><th class="r">Comp. (cm)</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Pátio · Localização</th><th>Observações</th></tr></thead><tbody>'+trU+'</tbody></table></div>';
 
- return '<div class="pn-sum">'+resumo+'</div>'+kpis+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
-  '<div class="note mt">Fonte: registros de Aço pronto do sistema (mesmas colunas do Histórico e do CSV). O saldo é a soma das entradas menos as retiradas registradas; ele só reflete a realidade se as retiradas também forem lançadas.</div>';
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
+  '<div class="note mt">Fonte: registros de Aço pronto do sistema (mesmas colunas do Histórico e do CSV). '+(semSaldo?'Com Operação = '+esc(f.operacao)+' não há saldo (ele precisa de entradas e retiradas). Escolha <b>Todas</b> para ver o saldo em números ou <b>Saldo</b> para listar só o que ainda está no pátio.':mSaldo?'O modo Saldo só é confiável se as retiradas também forem lançadas.':'O saldo é a soma das entradas menos as retiradas registradas; ele só reflete a realidade se as retiradas também forem lançadas.')+'</div>';
 }
 function acFiltro(t){
  const k=t.dataset.af,v=t.value;
