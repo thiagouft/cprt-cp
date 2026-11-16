@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0E1A2B">
 <script>/* aplica o tema salvo antes de desenhar a página (evita piscar). Sem escolha salva, segue o do aparelho. */
 try{var _t=localStorage.getItem('cprt_tema');if(_t!=='dark'&&_t!=='light')_t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.svg?v=35" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -247,7 +247,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div class="app">
   <header class="top">
     <div class="top-in is-login" id="top-in">
-      <div class="mark" aria-hidden="true">CP</div>
+      <img src="icon.svg" alt="" width="40" height="40" style="border-radius:8px;flex:none">
       <div class="grow">
         <h1>Controle de Aço</h1>
         <div class="sub" id="subline" style="display:none"></div>
@@ -607,7 +607,7 @@ function vLogin(){
  return '<div style="max-width:420px;margin:32px auto">'+
   '<div class="card pad" style="padding:28px 24px;border-top:4px solid var(--accent)">'+
   '<div style="text-align:center;margin-bottom:20px">'+
-  '<div class="mark" style="width:52px;height:52px;font-size:26px;margin:0 auto 12px">CP</div>'+
+  '<img src="logo.svg" alt="Controle de Aço CPRT" width="96" height="96" style="display:block;margin:0 auto 14px;border-radius:20px">'+
   '<h2 style="font-family:var(--font-d);font-size:26px;letter-spacing:.04em;text-transform:uppercase;margin:0">Acesso ao Sistema</h2>'+
   '<p class="muted" style="font-size:13.5px;margin:4px 0 0">Controle de Retirada e Mobilização de Aço</p>'+
   '</div>'+
