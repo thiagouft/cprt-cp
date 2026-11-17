@@ -896,7 +896,6 @@ async function cadastrarUsuario(){
 const PAGINA=40;
 function hojeCompacto(){return dkey(new Date()).replace(/-/g,'');}
 function guardaNoCache(lista){ // S.records é só um cache do que já foi baixado (nunca é substituído por uma página filtrada)
- corrigeDiametro(lista);
  const porId=new Map(S.records.map(r=>[r.id,r]));
  lista.forEach(r=>{
   const x=porId.get(r.id);
@@ -1062,10 +1061,6 @@ function ruasDatalist(){
 }
 
 function diamTxt(v){const d=PainelCalc.diametroCord(v);return d==null?null:String(d).replace('.',',');} // "12.700" da IA -> "12,7" (o ponto aqui não é milhar)
-function corrigeDiametro(lista){ // registros antigos de cordoalha gravados como 12700/15200/15701: voltam a mm (a correção no banco é à parte)
- (lista||[]).forEach(r=>{if(r&&r.prod==='cord'&&r.bitola!=null&&r.bitola!==''){const d=PainelCalc.diametroCord(r.bitola);if(d!=null)r.bitola=d;}});
- return lista;
-}
 function numBR(x){
  if(x==null||x==='')return NaN;if(typeof x==='number')return x;
  let t=String(x).trim().replace(/\s/g,'');
@@ -1535,7 +1530,7 @@ async function exportarCsv(todos){ // o servidor entrega TODOS os registros que 
   const res=await fetch('/api/registros/exportar?'+(todos?'':filtersHist().toString()),{headers:{'authorization':'Bearer '+Auth.token}});
   if(!res.ok)throw new Error('http '+res.status);
   const d=await res.json();
-  lista=corrigeDiametro(d.registros);
+  lista=d.registros;
   const ja=new Set(lista.map(r=>r.id)),fila=Fila.ids(); // o que ainda está só neste aparelho também entra
   S.records.filter(r=>fila.indexOf(r.id)>-1&&!ja.has(r.id)&&(todos||casaFiltro(r))).forEach(r=>lista.push(r));
  }catch(e){
