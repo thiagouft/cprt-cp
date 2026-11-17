@@ -128,6 +128,20 @@ async function initDb() {
   }
 }
 
+// Padroniza o elemento do aço pronto ("LAJE" lido pela metade vira "LAJES") com base no que já existe no banco (regra em PainelCalc).
+// As contagens ficam em memória por 5 minutos; se a consulta falhar, o valor segue como veio.
+let mapaElemCache = { em: 0, mapa: null };
+async function mapaElementosServidor() {
+  if (mapaElemCache.mapa && Date.now() - mapaElemCache.em < 5 * 60 * 1000) return mapaElemCache.mapa;
+  try {
+    const r = await pool.query("SELECT upper(trim(dados->>'elemento')) AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' AND coalesce(trim(dados->>'elemento'), '') <> '' GROUP BY 1");
+    const c = {};
+    r.rows.forEach(x => { c[x.e] = x.n; });
+    mapaElemCache = { em: Date.now(), mapa: PainelCalc.mapaElementos(c) };
+  } catch (e) { /* sem padronização desta vez */ }
+  return mapaElemCache.mapa;
+}
+
 // Obter usuário autenticado pela requisição
 async function getAuthUser(req) {
   const auth = String(req.headers['authorization'] || '');
@@ -255,6 +269,9 @@ async function ler(req, res, user) {
       } catch (e) { console.log('Leitura barata falhou (' + dados.tipo + '): ' + e.message + ' — repetindo no modelo preciso.'); }
     }
     if (!parsed) parsed = await chamaModelo(MODEL, dados.tipo, prompt, img, 700, 45000);
+    if (dados.tipo === 'etiqueta' && parsed && typeof parsed.elemento === 'string' && parsed.elemento.trim()) {
+      parsed.elemento = PainelCalc.elementoPadrao(parsed.elemento, await mapaElementosServidor());   // etiqueta gasta: "LAJE" -> "LAJES"
+    }
     if (dados && dados.tipo === 'cracha' && parsed && typeof parsed === 'object') {
       if (parsed.tipo_doc === 'rg' || parsed.registro_geral) {
         parsed.cracha = parsed.registro_geral || parsed.cracha || null;
@@ -760,6 +777,9 @@ async function salvarRegistro(req, res, user) {
 
   const { id, protocolo, op, at, controlador, patio, prod, photos, ...resto } = rec;
   const usuarioId = user ? user.id : null;
+  if ((prod || 'aco') === 'aco' && typeof resto.elemento === 'string' && resto.elemento.trim()) {
+    resto.elemento = PainelCalc.elementoPadrao(resto.elemento, await mapaElementosServidor());   // mesmo elemento, sempre com o mesmo nome
+  }
 
   const c = await pool.connect();
   try {
@@ -784,7 +804,7 @@ async function salvarRegistro(req, res, user) {
     `, [id, protoFinal, op, new Date(at || Date.now()), controlador || '', patioFinal, prod || 'aco', JSON.stringify(resto), JSON.stringify(photos || {}), usuarioId]);
     await c.query('COMMIT');
 
-    return json(res, 200, { ok: true, id, protocolo: protoFinal });
+    return json(res, 200, { ok: true, id, protocolo: protoFinal, elemento: resto.elemento });
   } catch (e) {
     try { await c.query('ROLLBACK'); } catch (e2) {}
     console.error('Erro ao salvar registro no PostgreSQL:', e);

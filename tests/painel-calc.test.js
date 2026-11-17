@@ -316,5 +316,26 @@ secao('Diâmetro da cordoalha');
   eq('barra reta não é afetada (12.5 continua 12.5)', aco[0].bitola, 12.5);
 }
 
+/* =============== 7) Elemento: LAJE / LAJES, TRAV / TRAVE... =============== */
+secao('Elemento padronizado');
+{
+  const cont = { LAJES: 658, NICHO: 321, 'LIGAÇ': 110, SUPER: 79, SAIDA: 30, TRAVE: 20, TRANS: 12, TRAV: 5, LAJE: 3, 'SAÍDA': 1, 'LIGAÇÃO': 1, FL11NICHO: 1, CABO: 2 };
+  const m = PC.mapaElementos(cont), p = v => PC.elementoPadrao(v, m);
+  eq('LAJE (etiqueta gasta) → LAJES', p('LAJE'), 'LAJES'); eq('minúsculas e espaços: " laje " → LAJES', p(' laje '), 'LAJES');
+  eq('lido pela metade, valor novo: LAJ → LAJES', p('LAJ'), 'LAJES'); eq('LAJES continua', p('LAJES'), 'LAJES');
+  eq('TRAV → TRAVE', p('TRAV'), 'TRAVE'); eq('SAÍDA → SAIDA (variante de acento mais usada)', p('SAÍDA'), 'SAIDA');
+  eq('nome inteiro: LIGAÇÃO → LIGAÇ', p('LIGAÇÃO'), 'LIGAÇ'); eq('sem acento: LIGACAO → LIGAÇ', p('LIGACAO'), 'LIGAÇ'); eq('SUPERIOR → SUPER', p('SUPERIOR'), 'SUPER');
+  eq('ambíguo não mexe: TRA (TRAVE ou TRANS)', p('TRA'), 'TRA'); eq('curto demais não mexe: LA', p('LA'), 'LA');
+  eq('elemento diferente não mexe: CABO', p('CABO'), 'CABO'); eq('elemento raro e sem padrão não mexe: FL11NICHO', p('FL11NICHO'), 'FL11NICHO');
+  eq('vazio continua vazio', p(''), ''); eq('sem mapa devolve o valor em maiúsculas', PC.elementoPadrao('laje', null), 'LAJE');
+  const mk = (id, el, kg) => ({ id, protocolo: id, op: 'mob', at: new Date(2026, 10, 12, 10, 0).toISOString(), controlador: 'T', patio: 'Marabá', prod: 'aco', os: '1', cod: '4512', cpt: 'C' + id, desenho: '258', posicao: id, cj: '1', elemento: el, bitola: 10, aco: 'CA-50S', comp: 250, qtd: 100, m: 250, kg, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' });
+  const regs = []; for (let i = 0; i < 8; i++) regs.push(mk('s' + i, 'LAJES', 100)); regs.push(mk('l1', 'LAJE', 200), mk('l2', 'LAJE', 300));
+  const A = PC.acoPronto(PC.normalizar(regs), {}, HOJE);
+  eq('Aço pronto: LAJE soma em LAJES (peso t)', A.porElemento.find(e => e.rotulo === 'LAJES').t, 1.3);
+  check('Aço pronto: não sobra linha LAJE', !A.porElemento.some(e => e.rotulo === 'LAJE'), JSON.stringify(A.porElemento.map(e => e.rotulo)));
+  check('filtro Elemento não lista LAJE', A.opcoes.elementos.indexOf('LAJE') < 0 && A.opcoes.elementos.indexOf('LAJES') > -1, JSON.stringify(A.opcoes.elementos));
+  eq('filtrar por LAJES traz as 10 etiquetas', PC.acoPronto(PC.normalizar(regs), { elemento: 'LAJES' }, HOJE).kpis.etiquetas, 10);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

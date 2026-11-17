@@ -43,6 +43,49 @@
     if (n >= 100) n = n / 1000;
     return Math.round(n * 10) / 10;
   }
+  /* ---------- Elemento (aço pronto): "LAJE" e "LAJES" são o mesmo elemento ----------
+   * A etiqueta imprime o elemento em poucas letras (LAJES, NICHO, LIGAÇ...) e, com a etiqueta gasta ou a IA lendo pela metade, aparecem
+   * "LAJE", "TRAV", "SAÍDA" ou o nome inteiro ("LIGAÇÃO"). O padrão é aprendido dos próprios registros: um valor raro vira o valor
+   * frequente quando (1) é o começo dele, (2) é o nome inteiro de um padrão de 5 letras ou (3) só difere no acento.
+   * Só junta quando há um único candidato claro; na dúvida (ex.: "TRA" serve para TRAVE e TRANS) deixa como está. */
+  function chaveElem(v) {
+    return str(v).trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+  }
+  function mapaElementos(contagens) { // contagens: { NOME: nº de registros }  ->  { CHAVE_SEM_ACENTO: NOME PADRÃO }
+    var por = {}, chaves = [], mapa = {};
+    Object.keys(contagens || {}).forEach(function (nome) {
+      var k = chaveElem(nome), n = Number(contagens[nome]) || 0;
+      if (!k) return;
+      var g = por[k];
+      if (!g) { g = por[k] = { k: k, n: 0, nome: '', nomeN: -1 }; chaves.push(k); }
+      g.n += n;
+      if (n > g.nomeN) { g.nomeN = n; g.nome = str(nome).trim().toUpperCase(); }   // entre variantes de acento fica a mais usada
+    });
+    chaves.forEach(function (k) { mapa[k] = por[k].nome; });
+    var padroes = chaves.map(function (k) { return por[k]; }).filter(function (h) { return h.n >= 5; });   // candidatos a padrão
+    chaves.forEach(function (k) { var p = escolhePadrao(k, por[k].n, padroes); if (p) mapa[k] = p; });
+    Object.defineProperty(mapa, '__padroes', { value: padroes, enumerable: false });   // para valores novos, que ainda não estão nas contagens
+    return mapa;
+  }
+  function escolhePadrao(k, n, padroes) { // devolve o nome padrão para a chave k (com n registros), ou '' se não há candidato claro
+    var cand = [];
+    padroes.forEach(function (h) {
+      if (h.k === k || h.n < 3 * n) return;                                              // o padrão tem que ser bem mais usado
+      if (k.length >= 3 && h.k.length > k.length && h.k.indexOf(k) === 0) cand.push(h);  // lido pela metade (LAJE -> LAJES)
+      else if (k.length > 5 && h.k.length === 5 && k.indexOf(h.k) === 0) cand.push(h);   // nome inteiro (LIGAÇÃO -> LIGAÇ)
+    });
+    if (!cand.length) return '';
+    cand.sort(function (a, b) { return b.n - a.n; });
+    if (cand.length > 1 && cand[1].n * 2 > cand[0].n) return '';                         // ambíguo: não mexe
+    return cand[0].nome;
+  }
+  function elementoPadrao(valor, mapa) {
+    var v = str(valor).trim().toUpperCase();
+    if (!v || !mapa) return v;
+    var k = chaveElem(v);
+    if (mapa[k]) return mapa[k];
+    return (mapa.__padroes && escolhePadrao(k, 0, mapa.__padroes)) || v;   // valor que ainda não existia no banco
+  }
   function numOuNull(v) {
     if (v == null || str(v).trim() === '') return null;
     var n = num(v);
@@ -110,8 +153,13 @@
 
   /* ---------- normalização dos registros do sistema ---------- */
   function normalizar(registros) {
-    var out = [];
-    for (var i = 0; i < registros.length; i++) out.push(linha(registros[i]));
+    var out = [], cont = {}, i, e;
+    for (i = 0; i < registros.length; i++) {
+      e = registros[i];
+      if (e && (e.prod || 'aco') === 'aco' && str(e.elemento).trim()) { var nm = str(e.elemento).trim().toUpperCase(); cont[nm] = (cont[nm] || 0) + 1; }
+    }
+    var mapa = mapaElementos(cont);
+    for (i = 0; i < registros.length; i++) out.push(linha(registros[i], mapa));
     atribuiCargas(out);
     return out;
   }
@@ -160,7 +208,7 @@
     });
     return { total: lista.length, registradas: reg, estimadas: lista.length - reg, maior: maior, media: lista.length ? rows.length / lista.length : 0, lista: top };
   }
-  function linha(r) {
+  function linha(r, mapaElem) {
     var d = new Date(r.at), cord = r.prod === 'cord';
     var dia = diaNum(d), min = d.getHours() * 60 + d.getMinutes();
     var produto = PRODUTOS[r.prod] || PRODUTOS.aco;
@@ -170,7 +218,7 @@
       dia: dia, min: min, ts: dia * 1440 + min, controlador: str(r.controlador),
       os: str(cord ? r.ordem : r.os), cod: str(r.cod), cpt: str(r.cpt), material: str(r.material), descricao: str(r.descricao || r.marca),
       corrida: str(r.corrida), feixe: str(r.feixe), lote: str(r.lote), desenho: str(r.desenho), posicao: str(r.posicao), cj: str(r.cj),
-      elemento: str(r.elemento), bitola: bit, aco: str(r.aco), comp: numOuNull(r.comp), barras: cord ? 0 : num(r.qtd),
+      elemento: elementoPadrao(r.elemento, mapaElem), bitola: bit, aco: str(r.aco), comp: numOuNull(r.comp), barras: cord ? 0 : num(r.qtd),
       metros: num(r.m), kg: num(r.kg), pbruto: numOuNull(r.pbruto), torcao: str(r.torcao), resist: str(r.resist), norma: str(r.norma),
       datafab: str(r.datafab), re: str(r.re), placa: str(r.placa), motorista: str(r.motorista), empresa: str(r.empresa), cracha: str(r.cracha),
       destino: str(r.destino), autorizador: str(r.autorizador), obs: str(r.obs),
@@ -515,7 +563,7 @@
   }
 
   return {
-    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord,
+    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };

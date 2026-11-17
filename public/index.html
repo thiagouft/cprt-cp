@@ -269,7 +269,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=39"></script>
+<script src="painel-calc.js?v=41"></script>
 <script>
 (function(){
 'use strict';
@@ -1624,6 +1624,10 @@ async function enviarRegistro(r){
   if(res.ok){
    let d=null;try{d=await res.json();}catch(e){}
    if(d&&d.protocolo&&d.protocolo!==r.protocolo)await aplicaProtocolo(r,d.protocolo); // o servidor é quem garante que o número não se repete
+   if(d&&typeof d.elemento==='string'&&d.elemento&&d.elemento!==r.elemento){ // o servidor padronizou o elemento (LAJE -> LAJES)
+    r.elemento=d.elemento;S.records.forEach(x=>{if(x.id===r.id)x.elemento=d.elemento;});
+    try{const l=await DB.get(r.id);if(l){l.elemento=d.elemento;await DB.put(l);}}catch(e){}
+   }
    Fila.del(r.id);if(S.srvIds)S.srvIds.add(r.id);enxugaLocal(r);
    if(S.hist&&S.hist.ids.indexOf(r.id)<0&&casaFiltro(r))S.hist.ids.push(r.id); // continua na lista do Histórico depois de sair da fila
    return true;
