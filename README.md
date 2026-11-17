@@ -47,6 +47,8 @@ Menu **Painel** com duas visões, calculadas em tempo real sobre todos os regist
 
 Filtros: busca de texto (em todos os campos ou em uma coluna), pátio, operação, produto, período (Hoje, 7 dias, 30 dias, todo o período) e datas De/Até livres.
 
+**Alterar registro:** quem tem a permissão "Alteração" (Usuários → *Permitir Alteração*, ou a caixa no cadastro do usuário) vê o botão **Alterar** no detalhe do registro e pode corrigir o **pátio**, placa, documento, motorista, empresa, localização, autorizador e observações. Em registros de uma carga, dá para aplicar a mudança às demais etiquetas da carga. Etiqueta, peso e protocolo não mudam. Cada alteração guarda quem fez, quando e o valor anterior (aparece no detalhe). Administradores têm a permissão sempre; usuário comum não, por padrão. O servidor valida a permissão em `POST /api/registros/:id/alterar` e o reenvio comum de registro não troca mais o pátio de um registro já gravado.
+
 **Permissão:** o Painel só aparece para quem tem a permissão "Painel" (Usuários → *Permitir Painel*). Administradores têm acesso sempre; usuário comum não, por padrão. O servidor também bloqueia `GET /api/painel/base` sem a permissão.
 
 O cálculo fica em `public/painel-calc.js` (sem dependência de tela) e reproduz as regras do `Dash.xlsx`. Para validar contra a planilha:

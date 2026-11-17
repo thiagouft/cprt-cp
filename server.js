@@ -87,7 +87,8 @@ async function initDb() {
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_excluir BOOLEAN DEFAULT FALSE;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_gerenciar_usuarios BOOLEAN DEFAULT FALSE;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_ver_painel BOOLEAN DEFAULT FALSE;
-      UPDATE usuarios SET pode_excluir = TRUE, pode_gerenciar_usuarios = TRUE, pode_ver_painel = TRUE WHERE login = 'admin' OR role = 'admin';
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pode_editar BOOLEAN DEFAULT FALSE;
+      UPDATE usuarios SET pode_excluir = TRUE, pode_gerenciar_usuarios = TRUE, pode_ver_painel = TRUE, pode_editar = TRUE WHERE login = 'admin' OR role = 'admin';
 
       CREATE TABLE IF NOT EXISTS sessoes (
         token VARCHAR(128) PRIMARY KEY,
@@ -137,7 +138,7 @@ async function getAuthUser(req) {
 
   try {
     const r = await pool.query(
-      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir, u.pode_gerenciar_usuarios, u.pode_ver_painel
+      `SELECT u.id, u.nome, u.login, u.role, u.trocar_senha, u.pode_excluir, u.pode_gerenciar_usuarios, u.pode_ver_painel, u.pode_editar
        FROM sessoes s
        JOIN usuarios u ON u.id = s.usuario_id 
        WHERE s.token = $1 AND s.expires_at > NOW()`,
@@ -299,7 +300,7 @@ async function authLogin(req, res) {
       ok: true,
       token,
       trocar_senha: !!usuario.trocar_senha,
-      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir, pode_gerenciar_usuarios: podeGerenciar, pode_ver_painel: podePainel }
+      usuario: { id: usuario.id, nome: usuario.nome, login: usuario.login, role: usuario.role, trocar_senha: !!usuario.trocar_senha, pode_excluir: podeExcluir, pode_gerenciar_usuarios: podeGerenciar, pode_ver_painel: podePainel, pode_editar: podeEditarRegistro(usuario) }
     });
   } catch (e) {
     console.error('Erro no login:', e);
@@ -353,7 +354,8 @@ async function authMe(req, res, user) {
       trocar_senha: !!user.trocar_senha,
       pode_excluir: podeExcluir,
       pode_gerenciar_usuarios: podeGerenciar,
-      pode_ver_painel: podeVerPainel(user)
+      pode_ver_painel: podeVerPainel(user),
+      pode_editar: podeEditarRegistro(user)
     }
   });
 }
@@ -364,7 +366,7 @@ async function listarUsuarios(req, res, user) {
     return json(res, 403, { erro: 'Sem permissão para gerenciar usuários.' });
   }
   try {
-    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, created_at FROM usuarios ORDER BY id ASC');
+    const r = await pool.query('SELECT id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, pode_editar, created_at FROM usuarios ORDER BY id ASC');
     return json(res, 200, { ok: true, usuarios: r.rows });
   } catch (e) {
     return json(res, 500, { erro: 'Erro ao buscar usuários.' });
@@ -386,6 +388,7 @@ async function criarUsuario(req, res, user) {
   const podeExcluir = !!body.pode_excluir;
   const podeGerenciar = !!body.pode_gerenciar_usuarios;
   const podePainel = !!body.pode_ver_painel || role === 'admin';
+  const podeEditar = !!body.pode_editar || role === 'admin';
 
   if (!nome || !login || !senha) {
     return json(res, 400, { erro: 'Preencha Nome, Login e Senha.' });
@@ -399,8 +402,8 @@ async function criarUsuario(req, res, user) {
 
     const { hash, salt } = hashSenha(senha);
     const r = await pool.query(
-      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8) RETURNING id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, created_at',
-      [nome, login, hash, salt, role, podeExcluir, podeGerenciar, podePainel]
+      'INSERT INTO usuarios (nome, login, senha_hash, salt, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, pode_editar) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9) RETURNING id, nome, login, role, trocar_senha, pode_excluir, pode_gerenciar_usuarios, pode_ver_painel, pode_editar, created_at',
+      [nome, login, hash, salt, role, podeExcluir, podeGerenciar, podePainel, podeEditar]
     );
 
     return json(res, 201, { ok: true, usuario: r.rows[0] });
@@ -441,6 +444,10 @@ async function atualizarPermissaoUsuario(req, res, user, id) {
     if (body.pode_ver_painel !== undefined) {
       updates.push(`pode_ver_painel = $${idx++}`);
       values.push(!!body.pode_ver_painel);
+    }
+    if (body.pode_editar !== undefined) {
+      updates.push(`pode_editar = $${idx++}`);
+      values.push(!!body.pode_editar);
     }
 
     if (updates.length === 0) return json(res, 400, { erro: 'Nenhuma permissão informada.' });
@@ -688,6 +695,9 @@ async function listarLocalizacoes(req, res, user) {
   }
 }
 
+function podeEditarRegistro(u) {
+  return !!u && (!!u.pode_editar || u.role === 'admin' || u.login === 'admin');
+}
 function podeVerPainel(u) {
   return !!u && (!!u.pode_ver_painel || u.role === 'admin' || u.login === 'admin');
 }
@@ -756,8 +766,10 @@ async function salvarRegistro(req, res, user) {
     await c.query('BEGIN');
     // O número do protocolo é definido aqui: registro novo recebe o número pedido pelo aparelho se ele estiver livre;
     // se já existir, recebe o próximo número livre do mesmo tipo e dia. Registro que já existe nunca muda de protocolo.
-    const existente = await c.query('SELECT protocolo FROM registros WHERE id = $1', [id]);
+    const existente = await c.query('SELECT protocolo, patio FROM registros WHERE id = $1', [id]);
     const protoFinal = existente.rows.length ? existente.rows[0].protocolo : await protocoloLivre(c, protocolo, op, at);
+    // Trocar o pátio de um registro que já existe só é possível por "Alterar registro" (exige permissão); o reenvio comum não muda o pátio.
+    const patioFinal = existente.rows.length && user && !podeEditarRegistro(user) ? existente.rows[0].patio : (patio || '');
     await c.query(`
       INSERT INTO registros (id, protocolo, op, at, controlador, patio, prod, dados, photos, usuario_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -769,7 +781,7 @@ async function salvarRegistro(req, res, user) {
         prod = EXCLUDED.prod,
         dados = EXCLUDED.dados,
         photos = EXCLUDED.photos
-    `, [id, protoFinal, op, new Date(at || Date.now()), controlador || '', patio || '', prod || 'aco', JSON.stringify(resto), JSON.stringify(photos || {}), usuarioId]);
+    `, [id, protoFinal, op, new Date(at || Date.now()), controlador || '', patioFinal, prod || 'aco', JSON.stringify(resto), JSON.stringify(photos || {}), usuarioId]);
     await c.query('COMMIT');
 
     return json(res, 200, { ok: true, id, protocolo: protoFinal });
@@ -795,6 +807,68 @@ async function protocoloLivre(c, pedido, op, at) {
   }
   const mx = await c.query("SELECT COALESCE(MAX((regexp_match(protocolo, '-(\\d+)$'))[1]::int), 0) AS mx FROM registros WHERE protocolo LIKE $1", [base + '%']);
   return base + String(mx.rows[0].mx + 1).padStart(4, '0');
+}
+
+// Alteração de um registro já gravado (ex.: pátio escolhido errado). Exige a permissão "pode_editar" e guarda quem alterou, quando e o que mudou.
+const PATIOS_VALIDOS = ['Marabá', 'São Félix'];
+const CAMPOS_ALTERAVEIS = ['patio', 'placa', 'motorista', 'empresa', 'cracha', 'destino', 'autorizador', 'obs'];
+const CAMPOS_DA_CARGA = ['patio', 'placa', 'motorista', 'empresa', 'cracha', 'destino', 'autorizador']; // valem para a carga inteira (obs é de cada etiqueta)
+async function alterarRegistro(req, res, user, id) {
+  if (!user) return json(res, 401, { erro: 'Não autenticado.' });
+  if (!podeEditarRegistro(user)) return json(res, 403, { erro: 'Você não tem permissão para alterar registros.' });
+  let body;
+  try { body = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
+  const entrada = body && body.campos && typeof body.campos === 'object' ? body.campos : {};
+  const novos = {};
+  for (const k of CAMPOS_ALTERAVEIS) {
+    if (entrada[k] === undefined || entrada[k] === null) continue;
+    let v = String(entrada[k]).trim().slice(0, 200);
+    if (k === 'placa') { v = v.toUpperCase().replace(/[^A-Z0-9]/g, ''); if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(v)) return json(res, 400, { erro: 'Placa inválida. Use o formato ABC1D23 ou ABC1234.' }); }
+    if (k === 'patio' && PATIOS_VALIDOS.indexOf(v) < 0) return json(res, 400, { erro: 'Pátio inválido.' });
+    if ((k === 'motorista' || k === 'destino' || k === 'autorizador') && !v) return json(res, 400, { erro: 'Preencha motorista, localização e autorizador.' });
+    novos[k] = v;
+  }
+  if (!Object.keys(novos).length) return json(res, 400, { erro: 'Nenhuma alteração informada.' });
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    const alvo = await c.query('SELECT id, patio, dados FROM registros WHERE id = $1 FOR UPDATE', [id]);
+    if (!alvo.rows.length) { await c.query('ROLLBACK'); return json(res, 404, { erro: 'Registro não encontrado.' }); }
+    let ids = [id];
+    const cargaId = alvo.rows[0].dados && alvo.rows[0].dados.carga;
+    if (body.cargaInteira && cargaId) {
+      const t = await c.query("SELECT id FROM registros WHERE dados->>'carga' = $1 OR id = $1 ORDER BY at ASC, id ASC FOR UPDATE", [cargaId]);
+      ids = t.rows.map(r => r.id);
+    }
+    const alterados = [];
+    for (const rid of ids) {
+      const r = rid === id ? alvo.rows[0] : (await c.query('SELECT id, patio, dados FROM registros WHERE id = $1', [rid])).rows[0];
+      if (!r) continue;
+      const aplicar = {};
+      for (const k of Object.keys(novos)) { if (rid === id || CAMPOS_DA_CARGA.indexOf(k) > -1) aplicar[k] = novos[k]; }
+      const de = {}, para = {};
+      for (const k of Object.keys(aplicar)) {
+        const atual = k === 'patio' ? (r.patio || '') : String((r.dados && r.dados[k]) || '');
+        if (atual !== aplicar[k]) { de[k] = atual; para[k] = aplicar[k]; }
+      }
+      if (!Object.keys(para).length) continue;
+      const dadosNovos = Object.assign({}, r.dados);
+      Object.keys(para).forEach(k => { if (k !== 'patio') dadosNovos[k] = para[k]; });
+      const hist = Array.isArray(dadosNovos.alteracoes) ? dadosNovos.alteracoes.slice(-19) : [];
+      hist.push({ em: new Date().toISOString(), por: user.nome, login: user.login, de, para });
+      dadosNovos.alteracoes = hist;
+      await c.query('UPDATE registros SET patio = $2, dados = $3 WHERE id = $1', [rid, para.patio !== undefined ? para.patio : (r.patio || ''), JSON.stringify(dadosNovos)]);
+      alterados.push({ id: rid, campos: para });
+    }
+    await c.query('COMMIT');
+    return json(res, 200, { ok: true, alterados });
+  } catch (e) {
+    try { await c.query('ROLLBACK'); } catch (e2) {}
+    console.error('Erro ao alterar registro:', e.message);
+    return json(res, 500, { erro: 'Erro ao alterar registro.' });
+  } finally {
+    c.release();
+  }
 }
 
 async function excluirRegistro(req, res, user, id) {
@@ -895,6 +969,10 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/registros/') && p.endsWith('/fotos') && req.method === 'GET') {
     const id = p.split('/')[3];
     return obterFotosRegistro(req, res, user, id);
+  }
+  if (p.startsWith('/api/registros/') && p.endsWith('/alterar') && req.method === 'POST') {
+    const id = decodeURIComponent(p.split('/')[3]);
+    return alterarRegistro(req, res, user, id);
   }
   if (p.startsWith('/api/registros/') && req.method === 'DELETE') {
     const id = p.split('/')[3];
