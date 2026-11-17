@@ -296,5 +296,25 @@ secao('Aço pronto · modo Saldo');
   check('Entrada/Retirada continuam filtrando normalmente', PC.acoPronto(L, { operacao: 'Retirada' }, HOJE).kpis.etiquetas === 3 && PC.acoPronto(L, { operacao: 'Entrada' }, HOJE).kpis.etiquetas === 5);
 }
 
+/* =============== 6) Diâmetro da cordoalha: "12.700" não é doze mil =============== */
+secao('Diâmetro da cordoalha');
+{
+  const d = PC.diametroCord;
+  eq('12,700 (como impresso) → 12,7', d('12,700'), 12.7); eq('"12.700" da IA → 12,7', d('12.700'), 12.7); eq('12700 gravado errado → 12,7', d(12700), 12.7);
+  eq('15200 → 15,2', d(15200), 15.2); eq('"15.200" → 15,2', d('15.200'), 15.2);
+  eq('15,701 (medida real) → nominal 15,7', d('15,701'), 15.7); eq('15701 → 15,7', d(15701), 15.7); eq('15702 → 15,7', d(15702), 15.7);
+  eq('12,7 normal continua', d('12,7'), 12.7); eq('15.2 numérico continua', d(15.2), 15.2); eq('9,5 continua', d('9,5'), 9.5);
+  check('vazio, zero e texto → null', d('') === null && d(null) === null && d(0) === null && d('abc') === null);
+  const mk = (id, bit, kg) => ({ id, protocolo: id, op: 'mob', at: new Date(2026, 10, 14, 10, 0).toISOString(), controlador: 'T', patio: 'Marabá', prod: 'cord', ordem: 'OP1', bitola: bit, kg, m: 1000, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' });
+  const P = PC.painel(PC.normalizar([mk('a', '12.7', 1000), mk('b', '12700', 2000), mk('c', 15.2, 3000), mk('d', '15200', 4000), mk('e', '15701', 5000), mk('f', '15.7', 6000)]), {}, HOJE);
+  const rot = P.porBitola.filter(b => b.produtos['Cordoalha'] > 0).map(b => b.bitola).sort((a, b) => a - b).join(',');
+  eq('Painel: só 3 grupos de bitola (12,7 / 15,2 / 15,7)', rot, '12.7,15.2,15.7');
+  eq('Painel: peso 12,7 soma os dois (t)', P.porBitola.find(b => b.bitola === 12.7).produtos['Cordoalha'], 3);
+  eq('Painel: peso 15,2 soma os dois (t)', P.porBitola.find(b => b.bitola === 15.2).produtos['Cordoalha'], 7);
+  eq('Painel: peso 15,7 soma os dois (t)', P.porBitola.find(b => b.bitola === 15.7).produtos['Cordoalha'], 11);
+  const aco = PC.normalizar([{ id: 'x', protocolo: 'x', op: 'mob', at: new Date(2026, 10, 14, 10, 0).toISOString(), patio: 'Marabá', prod: 'barra', bitola: '12.5', kg: 10, qtd: 1 }]);
+  eq('barra reta não é afetada (12.5 continua 12.5)', aco[0].bitola, 12.5);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

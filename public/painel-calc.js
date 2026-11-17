@@ -33,6 +33,16 @@
     var n = parseFloat(s);
     return isFinite(n) ? n : 0;
   }
+  // Diâmetro da cordoalha (mm). A etiqueta imprime 3 casas ("12,700"; "15,701"): aqui o ponto NUNCA é separador de milhar.
+  // "12.700" lido como milhar virou 12700 (e 15.200 virou 15200). Valores >= 100 voltam a ser mm (/1000) e tudo vai ao tamanho
+  // nominal de 1 casa (12,7 / 15,2 / 15,7), para a mesma cordoalha cair sempre no mesmo grupo. Devolve null se não houver valor.
+  function diametroCord(v) {
+    if (v == null || str(v).trim() === '') return null;
+    var n = typeof v === 'number' ? v : parseFloat(str(v).trim().replace(/\s/g, '').replace(',', '.'));
+    if (!isFinite(n) || n <= 0) return null;
+    if (n >= 100) n = n / 1000;
+    return Math.round(n * 10) / 10;
+  }
   function numOuNull(v) {
     if (v == null || str(v).trim() === '') return null;
     var n = num(v);
@@ -154,7 +164,7 @@
     var d = new Date(r.at), cord = r.prod === 'cord';
     var dia = diaNum(d), min = d.getHours() * 60 + d.getMinutes();
     var produto = PRODUTOS[r.prod] || PRODUTOS.aco;
-    var bit = numOuNull(r.bitola);
+    var bit = cord ? diametroCord(r.bitola) : numOuNull(r.bitola);
     var L = {
       id: r.id, protocolo: str(r.protocolo), operacao: OPERACOES[r.op] || str(r.op), patio: str(r.patio), produto: produto,
       dia: dia, min: min, ts: dia * 1440 + min, controlador: str(r.controlador),
@@ -505,7 +515,7 @@
   }
 
   return {
-    chaveEtiqueta: chaveEtiqueta,
+    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };

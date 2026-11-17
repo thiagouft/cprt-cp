@@ -71,6 +71,8 @@ O lançamento individual continua igual (**"Novo registro"**). Cada etiqueta con
 ## Protocolo
 O número do protocolo (`ENT|RET-AAAAMMDD-NNNN`) é garantido pelo servidor. O aparelho propõe o número (para funcionar sem internet); ao gravar, o servidor mantém o número se ele estiver livre e, se já existir, usa o próximo número livre do mesmo tipo e dia, e o app mostra um aviso com o número final. Um registro que já existe nunca muda de protocolo.
 
+Cordoalhas gravadas com diâmetro em milhar (12700, 15200, 15701…) podem ser corrigidas com `node tools/corrigir-bitola-cordoalha.js` (simulação por padrão; `--apply` grava só o campo `bitola`, no tamanho nominal 12,7 / 15,2 / 15,7, e salva antes um backup dos registros afetados em `backups/`). O app e o Painel já mostram o valor certo mesmo sem rodar o script.
+
 Protocolos repetidos que já existiam no banco podem ser corrigidos com `node tools/corrigir-protocolos.js` (simulação por padrão; `--apply` grava, mantendo o número no registro mais antigo de cada grupo e salvando a lista antigo → novo em `backups/`).
 
 ## Armazenamento no celular

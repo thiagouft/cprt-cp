@@ -269,7 +269,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=33"></script>
+<script src="painel-calc.js?v=39"></script>
 <script>
 (function(){
 'use strict';
@@ -515,7 +515,7 @@ function validate(){
  ['etiqueta','placa','cracha'].forEach(k=>{if(!S.photos[k])add('ph-'+k,'Foto obrigatória: '+PH[k].t);});
  const f=S.form;
  if(S.prod==='cord'){
-  if(!(numBR(f.diametro)>0)) add('diametro','Informe o diâmetro da cordoalha');
+  if(PainelCalc.diametroCord(f.diametro)==null) add('diametro','Informe o diâmetro da cordoalha');
   if(!(numBR(f.pliq)>0)) add('pliq','Informe o peso líquido em kg');
   if(!(numBR(f.metragem)>0)) add('metragem','Informe a metragem em metros');
  }else if(S.prod==='barra'){
@@ -896,6 +896,7 @@ async function cadastrarUsuario(){
 const PAGINA=40;
 function hojeCompacto(){return dkey(new Date()).replace(/-/g,'');}
 function guardaNoCache(lista){ // S.records é só um cache do que já foi baixado (nunca é substituído por uma página filtrada)
+ corrigeDiametro(lista);
  const porId=new Map(S.records.map(r=>[r.id,r]));
  lista.forEach(r=>{
   const x=porId.get(r.id);
@@ -1060,6 +1061,11 @@ function ruasDatalist(){
  return '<datalist id="dl-ruas">'+Object.keys(vistos).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>'<option value="'+esc(n)+'"></option>').join('')+'</datalist>';
 }
 
+function diamTxt(v){const d=PainelCalc.diametroCord(v);return d==null?null:String(d).replace('.',',');} // "12.700" da IA -> "12,7" (o ponto aqui não é milhar)
+function corrigeDiametro(lista){ // registros antigos de cordoalha gravados como 12700/15200/15701: voltam a mm (a correção no banco é à parte)
+ (lista||[]).forEach(r=>{if(r&&r.prod==='cord'&&r.bitola!=null&&r.bitola!==''){const d=PainelCalc.diametroCord(r.bitola);if(d!=null)r.bitola=d;}});
+ return lista;
+}
 function numBR(x){
  if(x==null||x==='')return NaN;if(typeof x==='number')return x;
  let t=String(x).trim().replace(/\s/g,'');
@@ -1529,7 +1535,7 @@ async function exportarCsv(todos){ // o servidor entrega TODOS os registros que 
   const res=await fetch('/api/registros/exportar?'+(todos?'':filtersHist().toString()),{headers:{'authorization':'Bearer '+Auth.token}});
   if(!res.ok)throw new Error('http '+res.status);
   const d=await res.json();
-  lista=d.registros;
+  lista=corrigeDiametro(d.registros);
   const ja=new Set(lista.map(r=>r.id)),fila=Fila.ids(); // o que ainda está só neste aparelho também entra
   S.records.filter(r=>fila.indexOf(r.id)>-1&&!ja.has(r.id)&&(todos||casaFiltro(r))).forEach(r=>lista.push(r));
  }catch(e){
@@ -1738,7 +1744,7 @@ async function submit(){
  if(!S.patio){toast('Escolha o pátio na primeira tela.');S.submitting=false;return;}
  const r={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)),protocolo:nextProto(S.op),op:S.op,at:now.toISOString(),
   controlador:(Auth.user?Auth.user.nome:f.controlador).trim(),patio:S.patio,prod:S.prod||'aco',os:f.os||'',ordem:f.ordem||'',cod:f.cod||'',cpt:(f.cpt||'').toUpperCase(),desenho:f.desenho||'',posicao:f.posicao||'',cj:f.cj||'',elemento:(f.elemento||'').toUpperCase(),
-  bitola:S.prod==='cord'?String(numBR(f.diametro)):f.bitola,aco:(S.prod==='cord'?f.classe:S.prod==='barra'?f.categoria:f.aco)||'',comp:S.prod==='cord'?null:S.prod==='barra'?numBR(f.compm)*100:parseFloat(String(f.comp).replace(',','.')),qtd:S.prod==='cord'?1:S.prod==='barra'?(parseInt(f.qtd,10)||Math.max(1,Math.round(c.nb||1))):parseInt(f.qtd,10),marca:f.marca||'',corrida:f.corrida||'',feixe:f.feixe||'',lote:f.lote||'',barrasContadas:S.prod==='barra'&&parseInt(f.qtd,10)>0,m:c.m,kg:c.kg,material:f.material||'',descricao:f.descricao||'',norma:f.norma||'',torcao:f.torcao||'',resist:f.resist||'',pbruto:S.prod==='cord'?(numBR(f.pbruto)||null):null,espessura:f.espessura||'',re:f.re||'',datafab:f.datafab||'',
+  bitola:S.prod==='cord'?String(PainelCalc.diametroCord(f.diametro)):f.bitola,aco:(S.prod==='cord'?f.classe:S.prod==='barra'?f.categoria:f.aco)||'',comp:S.prod==='cord'?null:S.prod==='barra'?numBR(f.compm)*100:parseFloat(String(f.comp).replace(',','.')),qtd:S.prod==='cord'?1:S.prod==='barra'?(parseInt(f.qtd,10)||Math.max(1,Math.round(c.nb||1))):parseInt(f.qtd,10),marca:f.marca||'',corrida:f.corrida||'',feixe:f.feixe||'',lote:f.lote||'',barrasContadas:S.prod==='barra'&&parseInt(f.qtd,10)>0,m:c.m,kg:c.kg,material:f.material||'',descricao:f.descricao||'',norma:f.norma||'',torcao:f.torcao||'',resist:f.resist||'',pbruto:S.prod==='cord'?(numBR(f.pbruto)||null):null,espessura:f.espessura||'',re:f.re||'',datafab:f.datafab||'',
   placa:f.placa,motorista:f.motorista.trim(),empresa:(f.empresa||'').trim(),cracha:(f.cracha||'').trim(),destino:f.destino.trim(),autorizador:f.autorizador.trim(),obs:(f.obs||'').trim(),
   thumb: (S.photos.etiqueta && S.photos.etiqueta.thumb) ? S.photos.etiqueta.thumb : null,
   photos:{etiqueta:S.photos.etiqueta,placa:S.photos.placa,cracha:S.photos.cracha,notafiscal:S.photos.notafiscal||null}};
@@ -1823,7 +1829,7 @@ async function autofill(k,raw){
     if(tp&&!S.prodManual&&tp!==S.prod){S.prod=tp;S.auto.prod=true;renderDados();}
     if(S.prod==='cord'){
      const nz=x=>{const v=numBR(x);return v>0?v:null;},dg=x=>x?(String(x).replace(/\D/g,'')||null):null;
-     [['material',dg(d.material)],['descricao',d.descricao],['classe',d.classe],['diametro',nz(d.diametro)],['norma',d.norma],['ordem',dg(d.ordem)],['torcao',d.torcao?(/esq/i.test(d.torcao)?'ESQUERDA':'DIREITA'):null],['resist',d.resist],['pbruto',nz(d.pbruto)],['pliq',nz(d.pliq)],['espessura',d.espessura],['metragem',nz(d.metragem)],['re',dg(d.re)],['datafab',d.datafab],['cod',dg(d.cod)]].forEach(([f,v])=>{if(setField(f,v))n++;});
+     [['material',dg(d.material)],['descricao',d.descricao],['classe',d.classe],['diametro',diamTxt(d.diametro)],['norma',d.norma],['ordem',dg(d.ordem)],['torcao',d.torcao?(/esq/i.test(d.torcao)?'ESQUERDA':'DIREITA'):null],['resist',d.resist],['pbruto',nz(d.pbruto)],['pliq',nz(d.pliq)],['espessura',d.espessura],['metragem',nz(d.metragem)],['re',dg(d.re)],['datafab',d.datafab],['cod',dg(d.cod)]].forEach(([f,v])=>{if(setField(f,v))n++;});
      const w2=$('#calcwrap');if(w2)w2.innerHTML=calcHtml();
     }
     if(S.prod==='barra'){
