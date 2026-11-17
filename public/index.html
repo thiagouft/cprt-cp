@@ -2368,6 +2368,16 @@ function updateSub(){
  el.textContent='Pátio '+(S.patio||'não definido')+' · '+d;
 }
 
+const PERMS=['pode_excluir','pode_gerenciar_usuarios','pode_ver_painel','pode_editar'];
+let ultimaSyncUsuario=0;
+function atualizaPermissoesAoVoltar(){ // ao voltar para o app (aba, celular desbloqueado, conexão de volta), relê as permissões; no máximo a cada 20 s
+ if(!Auth.token||document.visibilityState==='hidden'||Date.now()-ultimaSyncUsuario<20000)return;
+ ultimaSyncUsuario=Date.now();
+ sincronizarUsuarioLogado();
+}
+document.addEventListener('visibilitychange',atualizaPermissoesAoVoltar);
+window.addEventListener('focus',atualizaPermissoesAoVoltar);
+window.addEventListener('online',atualizaPermissoesAoVoltar);
 async function sincronizarUsuarioLogado(){
  if(!Auth.token) return;
  try{
@@ -2375,9 +2385,13 @@ async function sincronizarUsuarioLogado(){
   if(res.ok){
    const data=await res.json();
    if(data.usuario){
+    const antes=JSON.stringify(PERMS.map(k=>!!(Auth.user&&Auth.user[k])));
     Auth.user=Object.assign({},Auth.user,data.usuario);
     Auth.set(Auth.token,Auth.user);
     renderTabs();
+    if(antes!==JSON.stringify(PERMS.map(k=>!!Auth.user[k]))){ // o administrador mudou as permissões: a tela acompanha sem precisar sair
+     render();toast('Suas permissões foram atualizadas.');
+    }
    }
   }else if(res.status===401){
    Auth.clear();
