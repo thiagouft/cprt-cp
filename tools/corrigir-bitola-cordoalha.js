@@ -8,6 +8,7 @@
  * Banco: usa DATABASE_URL (ou o padrão do docker-compose).
  */
 'use strict';
+require('./carregar-env'); // usa o DATABASE_URL do .env, como o servidor
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
@@ -62,4 +63,9 @@ const DB = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5
     const ainda = await pool.query("SELECT count(*) n FROM registros WHERE prod = 'cord' AND dados->>'bitola' ~ '^[0-9]+(\\.[0-9]+)?$' AND (dados->>'bitola')::numeric >= 100");
     console.log('Cordoalhas que ainda têm diâmetro >= 100:', ainda.rows[0].n);
   } finally { await pool.end(); }
-})().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+})().catch(e => {
+  const det = e.message || (e.errors && e.errors.map(x => x.code + ' ' + x.address + ':' + x.port).join(', ')) || e.code || String(e);
+  console.error('ERRO:', det);
+  if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT/.test(det)) console.error('Não conectou ao banco. Confira o DATABASE_URL no .env (o script usa o mesmo do servidor).');
+  process.exit(1);
+});

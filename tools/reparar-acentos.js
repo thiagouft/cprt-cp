@@ -10,6 +10,7 @@
  * Banco: usa DATABASE_URL (ou o padrão do docker-compose).
  */
 'use strict';
+require('./carregar-env'); // usa o DATABASE_URL do .env, como o servidor
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');

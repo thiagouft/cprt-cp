@@ -123,8 +123,32 @@ async function initDb() {
       console.log('✓ Usuário padrão criado: login "admin", senha "admin"');
     }
     console.log('✓ Banco de dados PostgreSQL conectado e tabelas sincronizadas.');
+    await corrigirDiametroCordoalha();
   } catch (err) {
     console.warn('Aviso ao inicializar PostgreSQL:', err.message);
+  }
+}
+
+// Correção automática (roda ao iniciar e só mexe no que ainda estiver errado): cordoalhas cujo diâmetro "12.700" foi lido como milhar
+// e gravado como 12700 (15200, 15701...). Nenhuma cordoalha tem 100 mm ou mais; o valor volta a mm (/1000, 1 casa) e o original fica
+// em dados.bitolaOriginal. Mesma regra de tools/corrigir-bitola-cordoalha.js e do app (PainelCalc.diametroCord).
+async function corrigirDiametroCordoalha() {
+  try {
+    const r = await pool.query(`
+      UPDATE registros SET dados = jsonb_set(
+          jsonb_set(dados, '{bitolaOriginal}', dados->'bitola'),
+          '{bitola}',
+          CASE jsonb_typeof(dados->'bitola')
+            WHEN 'number' THEN to_jsonb(round((dados->>'bitola')::numeric / 1000, 1))
+            ELSE to_jsonb(round((dados->>'bitola')::numeric / 1000, 1)::text)
+          END)
+      WHERE prod = 'cord' AND dados->>'bitola' ~ '^[0-9]{1,9}(\\.[0-9]+)?$' AND (dados->>'bitola')::numeric >= 100
+      RETURNING protocolo, dados->>'bitolaOriginal' AS antes, dados->>'bitola' AS depois`);
+    if (r.rowCount) {
+      console.log('✓ Diâmetro de cordoalha corrigido em ' + r.rowCount + ' registro(s): ' + r.rows.map(x => x.protocolo + ' ' + x.antes + '→' + x.depois).join(', '));
+    }
+  } catch (e) {
+    console.warn('Aviso ao corrigir o diâmetro das cordoalhas:', e.message);
   }
 }
 
