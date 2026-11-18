@@ -129,42 +129,50 @@ async function initDb() {
   }
 }
 
-// Padroniza o elemento do aço pronto ("LAJE" lido pela metade vira "LAJES") com base no que já existe no banco (regra em PainelCalc).
-// As contagens ficam em memória por 5 minutos; se a consulta falhar, o valor segue como veio.
-let mapaElemCache = { em: 0, mapa: null };
-async function mapaElementosServidor() {
-  if (mapaElemCache.mapa && Date.now() - mapaElemCache.em < 5 * 60 * 1000) return mapaElemCache.mapa;
+// Padroniza desenho e elemento do aço pronto com base no que já existe no banco (regras em PainelCalc): "LAJE" lido pela metade vira
+// "LAJES", "219-FL11NICHO" vira desenho 219-FL11 + elemento NICHO e "144FL11" fica "144/FL11" (separador mais usado do número 144).
+// Os mapas ficam em memória por 5 minutos; se a consulta falhar, o valor segue como veio.
+function calculaMapasDesenho(rows) { // rows: [{ d: desenho, e: elemento, n: nº de registros }]
+  const cont = {};
+  rows.forEach(x => { const k = (x.e || '').trim().toUpperCase(); if (k) cont[k] = (cont[k] || 0) + x.n; });
+  const elem = PainelCalc.mapaElementos(cont), cd = {};
+  rows.forEach(x => { const s = PainelCalc.separaDesenhoElemento(x.d || '', x.e || '', elem).desenho.trim(); if (s) cd[s] = (cd[s] || 0) + x.n; });
+  return { elem, des: PainelCalc.mapaDesenhos(cd) };
+}
+let mapasCache = { em: 0, m: null };
+async function mapasServidor() {
+  if (mapasCache.m && Date.now() - mapasCache.em < 5 * 60 * 1000) return mapasCache.m;
   try {
-    const r = await pool.query("SELECT upper(trim(dados->>'elemento')) AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' AND coalesce(trim(dados->>'elemento'), '') <> '' GROUP BY 1");
-    const c = {};
-    r.rows.forEach(x => { c[x.e] = x.n; });
-    mapaElemCache = { em: Date.now(), mapa: PainelCalc.mapaElementos(c) };
+    const r = await pool.query("SELECT coalesce(dados->>'desenho', '') AS d, coalesce(dados->>'elemento', '') AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' GROUP BY 1, 2");
+    mapasCache = { em: Date.now(), m: calculaMapasDesenho(r.rows) };
   } catch (e) { /* sem padronização desta vez */ }
-  return mapaElemCache.mapa;
+  return mapasCache.m;
 }
 
-// Aplica a regra do Painel a um objeto com desenho e elemento (leitura da foto ou registro): padroniza o elemento e separa o que veio colado.
+// Aplica a regra do Painel a um objeto com desenho e elemento (leitura da foto ou registro).
 async function padronizaDesenhoElemento(obj) {
   const d = typeof obj.desenho === 'string' ? obj.desenho : '', e = typeof obj.elemento === 'string' ? obj.elemento : '';
   if (!d.trim() && !e.trim()) return;
-  const s = PainelCalc.separaDesenhoElemento(d, e, await mapaElementosServidor());
+  const m = await mapasServidor();
+  if (!m) return;
+  const s = PainelCalc.separaDesenhoElemento(d, e, m.elem);
+  s.desenho = PainelCalc.desenhoPadrao(s.desenho, m.des);
   if (typeof obj.desenho === 'string' || s.desenho) obj.desenho = s.desenho;
   if (typeof obj.elemento === 'string' || s.elemento) obj.elemento = s.elemento;
 }
 
-// Correção dos registros já gravados com Desenho e Elemento colados ("219-FL11NICHO", elemento vazio): roda ao iniciar, usa a mesma regra do
-// Painel e só mexe no que ainda difere do padrão. Os valores originais ficam em dados.desenhoOriginal / dados.elementoOriginal.
+// Correção dos registros já gravados (desenho e elemento colados, elemento incompleto, separador do desenho): roda ao iniciar, usa a mesma regra
+// do Painel e só mexe no que ainda difere do padrão. Os valores originais ficam em dados.desenhoOriginal / dados.elementoOriginal.
 async function corrigirDesenhoElementoNoBanco() {
   try {
-    const r = await pool.query("SELECT dados->>'desenho' AS d, dados->>'elemento' AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' GROUP BY 1, 2");
-    const cont = {};
-    r.rows.forEach(x => { const k = (x.e || '').trim().toUpperCase(); if (k) cont[k] = (cont[k] || 0) + x.n; });
-    const mapa = PainelCalc.mapaElementos(cont);
+    const r = await pool.query("SELECT coalesce(dados->>'desenho', '') AS d, coalesce(dados->>'elemento', '') AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' GROUP BY 1, 2");
+    const mapas = calculaMapasDesenho(r.rows);
     const feitas = [];
     for (const x of r.rows) {
       const d = x.d || '', e = x.e || '';
       if (!d.trim() && !e.trim()) continue;
-      const s = PainelCalc.separaDesenhoElemento(d, e, mapa);
+      const s = PainelCalc.separaDesenhoElemento(d, e, mapas.elem);
+      s.desenho = PainelCalc.desenhoPadrao(s.desenho, mapas.des);
       if (s.desenho === d && s.elemento === e) continue;
       const u = await pool.query(
         `UPDATE registros SET dados = jsonb_set(jsonb_set(jsonb_set(jsonb_set(dados,

@@ -72,6 +72,32 @@
     Object.defineProperty(mapa, '__nomes', { value: nomes, enumerable: false });
     return mapa;
   }
+  /* ---------- Desenho com separador variável: "144FL11" e "144/FL11" são o mesmo desenho ----------
+   * Desenhos no formato <número><separador opcional>FL<número>[-<n>] (144/FL11, 144FL11, 219-FL10). A IA lê o separador ora com barra,
+   * ora com hífen, ora sem nada. Dentro do mesmo número-base, vale o separador mais usado nos registros (empate: com separador, "-" antes de "/").
+   * Só mexe nesse formato; "177-2", "BFL2-1" e outros desenhos ficam como vieram. */
+  var RE_DES_FL = /^(\d+)([\/-]?)(FL\d+(?:-\d+)?)$/i;
+  function mapaDesenhos(contagens) { // contagens: { DESENHO: nº de registros }  ->  { BASE: separador padrão }
+    var por = {}, mapa = {};
+    Object.keys(contagens || {}).forEach(function (d) {
+      var m = RE_DES_FL.exec(str(d).trim());
+      if (!m) return;
+      por[m[1]] = por[m[1]] || {};
+      por[m[1]][m[2]] = (por[m[1]][m[2]] || 0) + (Number(contagens[d]) || 0);
+    });
+    Object.keys(por).forEach(function (b) {
+      var s = Object.keys(por[b]).sort(function (x, y) {
+        return (por[b][y] - por[b][x]) || ((x === '' ? 1 : 0) - (y === '' ? 1 : 0)) || (x === '-' ? -1 : y === '-' ? 1 : 0);
+      });
+      mapa[b] = s[0];
+    });
+    return mapa;
+  }
+  function desenhoPadrao(desenho, mapa) {
+    var d = str(desenho).trim(), m = RE_DES_FL.exec(d);
+    if (!m || !mapa || mapa[m[1]] === undefined) return d;
+    return m[1] + mapa[m[1]] + m[3].toUpperCase();
+  }
   // Procura um elemento padrão no FIM do texto ("219-FL11NICHO" -> prefixo "219-FL11" + NICHO). O que vem antes tem que terminar em número.
   function fimElemento(texto, mapa) {
     var t = str(texto).trim(), k = chaveElem(t), nomes = (mapa && mapa.__nomes) || [], i, n;
@@ -188,8 +214,15 @@
       e = registros[i];
       if (e && (e.prod || 'aco') === 'aco' && str(e.elemento).trim()) { var nm = str(e.elemento).trim().toUpperCase(); cont[nm] = (cont[nm] || 0) + 1; }
     }
-    var mapa = mapaElementos(cont);
-    for (i = 0; i < registros.length; i++) out.push(linha(registros[i], mapa));
+    var mapa = mapaElementos(cont), cd = {}, s;
+    if (!modoPlanilha) {   // desenhos já separados do elemento, para achar o separador mais usado de cada número-base
+      for (i = 0; i < registros.length; i++) {
+        e = registros[i];
+        if (e && (e.prod || 'aco') === 'aco') { s = str(separaDesenhoElemento(e.desenho, e.elemento, mapa).desenho).trim(); if (s) cd[s] = (cd[s] || 0) + 1; }
+      }
+    }
+    var mapaDes = mapaDesenhos(cd);
+    for (i = 0; i < registros.length; i++) out.push(linha(registros[i], mapa, mapaDes));
     atribuiCargas(out);
     return out;
   }
@@ -238,13 +271,14 @@
     });
     return { total: lista.length, registradas: reg, estimadas: lista.length - reg, maior: maior, media: lista.length ? rows.length / lista.length : 0, lista: top };
   }
-  function linha(r, mapaElem) {
+  function linha(r, mapaElem, mapaDes) {
     var d = new Date(r.at), cord = r.prod === 'cord';
     var dia = diaNum(d), min = d.getHours() * 60 + d.getMinutes();
     var produto = PRODUTOS[r.prod] || PRODUTOS.aco;
     var bit = cord ? diametroCord(r.bitola) : numOuNull(r.bitola);
     var sep = modoPlanilha ? { desenho: str(r.desenho), elemento: str(r.elemento) }   // modo planilha: textos como vieram (reproduz o Excel)
       : (r.prod || 'aco') === 'aco' ? separaDesenhoElemento(r.desenho, r.elemento, mapaElem) : { desenho: str(r.desenho), elemento: elementoPadrao(r.elemento, mapaElem) };
+    if (!modoPlanilha) sep.desenho = desenhoPadrao(sep.desenho, mapaDes);
     var L = {
       id: r.id, protocolo: str(r.protocolo), operacao: OPERACOES[r.op] || str(r.op), patio: str(r.patio), produto: produto,
       dia: dia, min: min, ts: dia * 1440 + min, controlador: str(r.controlador),
@@ -595,7 +629,7 @@
   }
 
   return {
-    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao, separaDesenhoElemento: separaDesenhoElemento,
+    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao, separaDesenhoElemento: separaDesenhoElemento, mapaDesenhos: mapaDesenhos, desenhoPadrao: desenhoPadrao,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };

@@ -1,5 +1,5 @@
 // Guarda a casca do app para abrir rápido e funcionar sem sinal.
-const V = 'cprt-aco-v42', ARQ = ['./', 'index.html', 'painel-calc.js?v=42', 'manifest.webmanifest', 'icon.svg', 'logo.svg', 'favicon.svg']; // o ?v= deve ser igual ao do index.html
+const V = 'cprt-aco-v43', ARQ = ['./', 'index.html', 'painel-calc.js?v=43', 'manifest.webmanifest', 'icon.svg', 'logo.svg', 'favicon.svg']; // o ?v= deve ser igual ao do index.html
 self.addEventListener('install', e => {
   self.skipWaiting();
   // cache: 'reload' ignora a cópia guardada pelo navegador, para não instalar um arquivo velho junto com o index.html novo

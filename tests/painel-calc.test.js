@@ -368,5 +368,33 @@ secao('Desenho e elemento colados');
   PC.setModoPlanilha(false);
 }
 
+/* =============== 9) Desenho com separador variável: 144FL11 = 144/FL11 =============== */
+secao('Desenho com separador variável');
+{
+  const c = { '144/FL1': 1, '144/FL11': 3, '144FL11': 4, '144FL12': 1, '144/FL13': 8, '219-FL10': 29, '219-FL12': 10, '19-FL10': 1, '238FL1': 1, '238FL1-1': 2, '238FL2': 4, '44/FL11': 1, '44FL12': 1, '177-2': 5, 'BFL2-1': 1 };
+  const m = PC.mapaDesenhos(c), p = d => PC.desenhoPadrao(d, m);
+  eq('separador mais usado do 144 é a barra', m['144'], '/'); eq('do 219 é o hífen', m['219'], '-'); eq('do 238 é nenhum', m['238'], '');
+  eq('144FL11 → 144/FL11', p('144FL11'), '144/FL11'); eq('144FL12 → 144/FL12', p('144FL12'), '144/FL12'); eq('144/FL13 continua', p('144/FL13'), '144/FL13');
+  eq('hífen no lugar da barra: 144-FL11 → 144/FL11', p('144-FL11'), '144/FL11'); eq('minúsculas: 144fl11 → 144/FL11', p('144fl11'), '144/FL11');
+  eq('valor novo do 219: 219/FL10 → 219-FL10', p('219/FL10'), '219-FL10'); eq('219FL10 → 219-FL10', p('219FL10'), '219-FL10');
+  eq('desenho sem variação não muda (238FL1-1)', p('238FL1-1'), '238FL1-1'); eq('238FL2 continua', p('238FL2'), '238FL2');
+  eq('outro formato não muda (177-2)', p('177-2'), '177-2'); eq('letras antes do FL não mudam (BFL2-1)', p('BFL2-1'), 'BFL2-1');
+  eq('número-base desconhecido não muda', p('555FL1'), '555FL1'); eq('vazio', p(''), '');
+  eq('empate: prefere separador a nenhum (44)', PC.mapaDesenhos({ '44/FL11': 1, '44FL12': 1 })['44'], '/');
+  eq('empate entre hífen e barra: hífen', PC.mapaDesenhos({ '7-FL1': 2, '7/FL2': 2 })['7'], '-');
+  const mk = (id, d, e, kg) => ({ id, protocolo: id, op: 'mob', at: new Date(2026, 10, 12, 10, 0).toISOString(), controlador: 'T', patio: 'Marabá', prod: 'aco', os: '1', cod: '4512', cpt: 'C' + id, desenho: d, posicao: id, cj: '1', elemento: e, bitola: 10, aco: 'CA-50S', comp: 100, qtd: 10, m: 10, kg, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' });
+  const regs = [];
+  for (let i = 0; i < 8; i++) regs.push(mk('a' + i, '144/FL11', 'LONGA', 100));
+  regs.push(mk('b1', '144FL11', 'LONGA', 200), mk('b2', '144FL11LONGA', '', 300), mk('b3', '144-FL11', 'LONGA', 400));
+  const A = PC.acoPronto(PC.normalizar(regs), {}, HOJE);
+  eq('Aço pronto: um só desenho (144/FL11)', A.kpis.desenhos, 1);
+  eq('Aço pronto: soma de todas as variações (t)', A.resumoDesenhos.find(r => r.desenho === '144/FL11').t, 1.7);
+  check('filtro Desenho lista só 144/FL11', A.opcoes.desenhos.join('|') === 'Todos|144/FL11', JSON.stringify(A.opcoes.desenhos));
+  eq('filtrar por 144/FL11 traz as 11 etiquetas', PC.acoPronto(PC.normalizar(regs), { desenho: '144/FL11' }, HOJE).kpis.etiquetas, 11);
+  PC.setModoPlanilha(true);
+  eq('modo planilha não unifica (reproduz o Excel)', PC.acoPronto(PC.normalizar(regs), {}, HOJE).kpis.desenhos, 4);
+  PC.setModoPlanilha(false);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);
