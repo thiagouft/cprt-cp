@@ -196,9 +196,16 @@ h2.sec .n{background:var(--ink);color:var(--surface);width:22px;height:22px;bord
 .photos3 figure{margin:0}
 .photos3 img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;display:block;cursor:zoom-in;background:var(--surface2)}
 .photos3 figcaption{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:5px;text-align:center}
-.lightbox{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.92);display:grid;place-items:center;padding:12px}
-.lightbox img{max-width:100%;max-height:100%;border-radius:8px}
-.lightbox .iconbtn{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:rgba(0,0,0,.5)}
+.lightbox{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.94)}
+.lb-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:52px 12px 12px;overflow:hidden}
+.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;cursor:zoom-in;user-select:none;-webkit-user-drag:none}
+.lightbox.zoom .lb-stage{display:block;overflow:auto;padding:52px 0 12px;-webkit-overflow-scrolling:touch}
+.lightbox.zoom .lb-stage img{max-width:none;max-height:none;border-radius:0;cursor:grab;display:block;margin:0 auto}
+.lightbox.zoom .lb-stage.arrasta img{cursor:grabbing}
+.lb-bar{position:absolute;top:calc(8px + env(safe-area-inset-top));left:12px;right:12px;display:flex;gap:6px;align-items:center;justify-content:flex-end;z-index:2;pointer-events:none}
+.lb-bar>*{pointer-events:auto}
+.lb-info{margin-right:auto;color:#fff;font-size:13px;background:rgba(0,0,0,.55);padding:4px 10px;border-radius:99px}
+.lb-bar .btn{background:rgba(20,20,20,.7);color:#fff;border-color:rgba(255,255,255,.3);min-width:34px}
 textarea.exp{width:100%;min-height:180px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);padding:10px}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:12px;font-weight:600;font-size:14.5px;z-index:80;max-width:90%;box-shadow:var(--shadow)}
 .row{display:flex;gap:10px;flex-wrap:wrap}
@@ -1565,7 +1572,49 @@ function editRecSheet(r,cargaN){
   (cargaN>1?'<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;margin-top:12px"><input type="checkbox" id="er-carga" checked style="width:20px;height:20px"><span>Aplicar também às outras '+(cargaN-1)+' etiquetas da carga (pátio, placa, motorista, empresa, documento, local e autorizador)</span></label>':'')+
   alteracoesHtml(r);
 }
-function zoom(src){layer.insertAdjacentHTML('beforeend','<div class="lightbox" data-act="closezoom"><button class="iconbtn" aria-label="Fechar imagem" data-act="closezoom">'+ic('x')+'</button><img src="'+src+'" alt="Foto ampliada"></div>');}
+/* Visualizador de foto: abre inteira na tela; clique/“+” amplia até o tamanho original ou mais, e dá para rolar ou arrastar para ver o resto */
+function zoom(src){
+ const lb=document.createElement('div');lb.className='lightbox';
+ lb.innerHTML='<div class="lb-stage"><img alt="Foto ampliada" draggable="false"></div><div class="lb-bar"><span class="lb-info">Inteira na tela</span>'+
+  '<button type="button" class="btn sm" data-b="menos" aria-label="Diminuir">−</button><button type="button" class="btn sm" data-b="mais" aria-label="Ampliar">+</button>'+
+  '<button type="button" class="btn sm" data-b="ajusta">Ajustar</button><button type="button" class="btn sm" data-b="fecha" aria-label="Fechar">'+ic('x')+'</button></div>';
+ layer.appendChild(lb);
+ const stage=lb.querySelector('.lb-stage'),img=lb.querySelector('img'),info=lb.querySelector('.lb-info'),ZS=[0,1,1.5,2,3];
+ let idx=0,arrasto=null,moveu=false;
+ img.src=src;
+ const fecha=()=>{lb.remove();document.removeEventListener('keydown',tecla);};
+ const centro=()=>idx===0?[.5,.5]:[(stage.scrollLeft+stage.clientWidth/2-img.offsetLeft)/(img.offsetWidth||1),(stage.scrollTop+stage.clientHeight/2-img.offsetTop)/(img.offsetHeight||1)];
+ function vai(novo,cx,cy){ // novo: posição na lista de zooms; cx, cy: ponto da foto (0 a 1) que deve ficar no meio da tela
+  idx=Math.max(0,Math.min(ZS.length-1,novo));
+  if(idx===0){lb.classList.remove('zoom');img.style.width='';stage.scrollLeft=0;stage.scrollTop=0;info.textContent='Inteira na tela';return;}
+  lb.classList.add('zoom');
+  const w=(img.naturalWidth||1000)*ZS[idx];img.style.width=w+'px';info.textContent=Math.round(ZS[idx]*100)+'% · arraste ou role';
+  stage.scrollLeft=Math.max(0,w*cx-stage.clientWidth/2+img.offsetLeft);
+  stage.scrollTop=Math.max(0,img.offsetHeight*cy-stage.clientHeight/2+img.offsetTop);
+ }
+ const tecla=e=>{if(e.key==='Escape')fecha();else if(e.key==='+'||e.key==='=')vai(idx+1,...centro());else if(e.key==='-')vai(idx-1,...centro());};
+ document.addEventListener('keydown',tecla);
+ lb.querySelector('[data-b=fecha]').onclick=fecha;
+ lb.querySelector('[data-b=mais]').onclick=()=>vai(idx+1,...centro());
+ lb.querySelector('[data-b=menos]').onclick=()=>vai(idx-1,...centro());
+ lb.querySelector('[data-b=ajusta]').onclick=()=>vai(0);
+ img.addEventListener('click',e=>{ // clique alterna entre a foto inteira e o tamanho original, ampliando onde você clicou
+  if(moveu){moveu=false;return;}
+  if(idx===0){const r=img.getBoundingClientRect();vai(1,(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height);}else vai(0);
+ });
+ stage.addEventListener('click',e=>{if(e.target===stage&&idx===0)fecha();});   // clicar fora da foto fecha
+ stage.addEventListener('pointerdown',e=>{ // arrastar com o mouse para ver o resto da foto ampliada (no celular a rolagem já é nativa)
+  if(idx===0||e.pointerType!=='mouse'||e.button!==0)return;
+  arrasto={x:e.clientX,y:e.clientY,l:stage.scrollLeft,t:stage.scrollTop};moveu=false;stage.setPointerCapture(e.pointerId);stage.classList.add('arrasta');
+ });
+ stage.addEventListener('pointermove',e=>{if(!arrasto)return;const dx=e.clientX-arrasto.x,dy=e.clientY-arrasto.y;if(Math.abs(dx)+Math.abs(dy)>4)moveu=true;stage.scrollLeft=arrasto.l-dx;stage.scrollTop=arrasto.t-dy;});
+ const solta=()=>{arrasto=null;stage.classList.remove('arrasta');};
+ stage.addEventListener('pointerup',solta);stage.addEventListener('pointercancel',solta);
+ stage.addEventListener('wheel',e=>{ // foto inteira: a roda do mouse amplia; ampliada: a roda rola (com Ctrl, muda o zoom)
+  if(idx===0&&e.deltaY<0){e.preventDefault();const r=img.getBoundingClientRect();vai(1,Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height)));}
+  else if(idx>0&&e.ctrlKey){e.preventDefault();vai(idx+(e.deltaY<0?1:-1),...centro());}
+ },{passive:false});
+}
 
 /* ============ exportação ============ */
 async function saveFile(filename,text,mime){
@@ -1929,7 +1978,6 @@ document.addEventListener('click',async ev=>{
  const t=ev.target.closest('[data-act]');if(!t)return;
  const a=t.dataset.act;
  if(a==='ovl'){if(ev.target===t)closeLayer();return;}
- if(a==='closezoom'){const z=t.closest('.lightbox')||t;if(ev.target===t||ev.target.closest('.iconbtn')){const lb=$('.lightbox');if(lb)lb.remove();}return;}
  if(a==='tab'){
   S.tab=t.dataset.tab;
   if(S.tab==='novo'&&S.done)S.done=null; // tocar em "Registrar" sai da tela "Registro concluído" (o registro já está salvo)
