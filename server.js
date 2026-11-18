@@ -123,6 +123,7 @@ async function initDb() {
       console.log('✓ Usuário padrão criado: login "admin", senha "admin"');
     }
     console.log('✓ Banco de dados PostgreSQL conectado e tabelas sincronizadas.');
+    await corrigirDesenhoElementoNoBanco();
   } catch (err) {
     console.warn('Aviso ao inicializar PostgreSQL:', err.message);
   }
@@ -140,6 +141,43 @@ async function mapaElementosServidor() {
     mapaElemCache = { em: Date.now(), mapa: PainelCalc.mapaElementos(c) };
   } catch (e) { /* sem padronização desta vez */ }
   return mapaElemCache.mapa;
+}
+
+// Aplica a regra do Painel a um objeto com desenho e elemento (leitura da foto ou registro): padroniza o elemento e separa o que veio colado.
+async function padronizaDesenhoElemento(obj) {
+  const d = typeof obj.desenho === 'string' ? obj.desenho : '', e = typeof obj.elemento === 'string' ? obj.elemento : '';
+  if (!d.trim() && !e.trim()) return;
+  const s = PainelCalc.separaDesenhoElemento(d, e, await mapaElementosServidor());
+  if (typeof obj.desenho === 'string' || s.desenho) obj.desenho = s.desenho;
+  if (typeof obj.elemento === 'string' || s.elemento) obj.elemento = s.elemento;
+}
+
+// Correção dos registros já gravados com Desenho e Elemento colados ("219-FL11NICHO", elemento vazio): roda ao iniciar, usa a mesma regra do
+// Painel e só mexe no que ainda difere do padrão. Os valores originais ficam em dados.desenhoOriginal / dados.elementoOriginal.
+async function corrigirDesenhoElementoNoBanco() {
+  try {
+    const r = await pool.query("SELECT dados->>'desenho' AS d, dados->>'elemento' AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' GROUP BY 1, 2");
+    const cont = {};
+    r.rows.forEach(x => { const k = (x.e || '').trim().toUpperCase(); if (k) cont[k] = (cont[k] || 0) + x.n; });
+    const mapa = PainelCalc.mapaElementos(cont);
+    const feitas = [];
+    for (const x of r.rows) {
+      const d = x.d || '', e = x.e || '';
+      if (!d.trim() && !e.trim()) continue;
+      const s = PainelCalc.separaDesenhoElemento(d, e, mapa);
+      if (s.desenho === d && s.elemento === e) continue;
+      const u = await pool.query(
+        `UPDATE registros SET dados = jsonb_set(jsonb_set(jsonb_set(jsonb_set(dados,
+            '{desenhoOriginal}', coalesce(dados->'desenhoOriginal', to_jsonb(coalesce(dados->>'desenho', '')))),
+            '{elementoOriginal}', coalesce(dados->'elementoOriginal', to_jsonb(coalesce(dados->>'elemento', '')))),
+            '{desenho}', to_jsonb($3::text)), '{elemento}', to_jsonb($4::text))
+         WHERE prod = 'aco' AND coalesce(dados->>'desenho', '') = $1 AND coalesce(dados->>'elemento', '') = $2`, [d, e, s.desenho, s.elemento]);
+      if (u.rowCount) feitas.push(JSON.stringify(d) + '/' + JSON.stringify(e) + ' → ' + JSON.stringify(s.desenho) + '/' + s.elemento + ' (' + u.rowCount + ')');
+    }
+    if (feitas.length) console.log('✓ Desenho/elemento corrigidos no banco: ' + feitas.join(', '));
+  } catch (e) {
+    console.warn('Aviso ao corrigir desenho/elemento no banco:', e.message);
+  }
 }
 
 // Obter usuário autenticado pela requisição
@@ -166,7 +204,7 @@ async function getAuthUser(req) {
 
 // Prompts para a IA
 const PROMPTS = {
-  etiqueta: "A imagem é uma etiqueta de material de obra. Primeiro identifique o tipo e devolva na chave tipo: \"aco\" para etiqueta de aço pronto cortado e dobrado (campos Desenho, Posição, Elemento, Comp. Unit., Bitola, Tipo de Aço CA-50, Conteúdo, CJ, O.S., código CPT/CPM); \"barra\" para etiqueta de barra reta de aço de siderúrgica (ex. ArcelorMittal, Gerdau), com marca, bitola em MM, comprimento em m, categoria CA25/CA50/CA60, norma ABNT NBR 7480, Corrida, Feixe, Material e Peso Líquido; \"cordoalha\" para etiqueta de cordoalha de aço de protensão (campos Material, Descrição CORD 7 FIOS, Aço, Diâmetro, Norma, Ordem de Produção, Sentido de Torção, Resistência, Peso Bruto, Peso Líquido, Metragem, Data). Leia só o que estiver legível, não invente, e ignore qualquer faixa ou carimbo de data, hora e endereço sobreposto na foto (mesmo de cabeça para baixo). Os números seguem o padrão brasileiro: ponto separa milhar e vírgula separa decimais (2.912 kg = 2912; 12,700 mm = 12.7; 20,00MM = 20). Devolva números simples, sem unidade. Responda apenas com um objeto JSON. Para aço pronto: os (número da O.S., só dígitos, string), cod (número do código após \"Nº\", só dígitos, string), cpt (código grande em destaque na etiqueta que começa com CPT, CTP, CPM ou DF, ex. CPT25R ou DF301C, pode estar na vertical perto do código de barras, sem espaços, string), desenho (string), posicao (string), elemento (string, ex. PILAR), cj (string), bitola (número em mm, ex. 16.0), aco (string, ex. CA-50S), comp (comprimento unitário em cm, número), qtd (campo Conteúdo, quantidade de barras, número inteiro), obs (texto da observação, ex. PILARES P2,P3,P14 E P15 (x4)). Para barra reta: marca (texto de marca e produto, ex. ArcelorMittal 50 S), bitola (mm, número), comprimento (em metros, número), categoria (ex. CA50), norma (ex. ABNT NBR 7480/2024), corrida (ex. 27602/82), feixe (string, ex. 017), material (só dígitos, string), pliq (peso líquido em kg, número), lote (código impresso perto do fabricante, ex. PITL2 160420261903, se houver), cod (número do código de barras impresso, só dígitos). Para cordoalha: material (só dígitos, string), descricao (string), classe (campo \"Aço\", ex. BL82, string), diametro (mm, número), norma (string), ordem (Ordem de Produção, só dígitos, string), torcao (\"DIREITA\" ou \"ESQUERDA\"), resist (texto, ex. 190 kgf/mm²), pbruto (peso bruto em kg, número), pliq (peso líquido em kg, número), espessura (texto), metragem (em metros, número), re (dígitos do campo RE, só se legível), datafab (dd/mm/aaaa), cod (número do código de barras impresso, só dígitos). Use null para o que não se aplica ao tipo ou não estiver legível.",
+  etiqueta: "A imagem é uma etiqueta de material de obra. Primeiro identifique o tipo e devolva na chave tipo: \"aco\" para etiqueta de aço pronto cortado e dobrado (campos Desenho, Posição, Elemento, Comp. Unit., Bitola, Tipo de Aço CA-50, Conteúdo, CJ, O.S., código CPT/CPM); \"barra\" para etiqueta de barra reta de aço de siderúrgica (ex. ArcelorMittal, Gerdau), com marca, bitola em MM, comprimento em m, categoria CA25/CA50/CA60, norma ABNT NBR 7480, Corrida, Feixe, Material e Peso Líquido; \"cordoalha\" para etiqueta de cordoalha de aço de protensão (campos Material, Descrição CORD 7 FIOS, Aço, Diâmetro, Norma, Ordem de Produção, Sentido de Torção, Resistência, Peso Bruto, Peso Líquido, Metragem, Data). Leia só o que estiver legível, não invente, e ignore qualquer faixa ou carimbo de data, hora e endereço sobreposto na foto (mesmo de cabeça para baixo). Os números seguem o padrão brasileiro: ponto separa milhar e vírgula separa decimais (2.912 kg = 2912; 12,700 mm = 12.7; 20,00MM = 20). Devolva números simples, sem unidade. Responda apenas com um objeto JSON. Para aço pronto: os (número da O.S., só dígitos, string), cod (número do código após \"Nº\", só dígitos, string), cpt (código grande em destaque na etiqueta que começa com CPT, CTP, CPM ou DF, ex. CPT25R ou DF301C, pode estar na vertical perto do código de barras, sem espaços, string), desenho (string), posicao (string), elemento (string, ex. PILAR), cj (string), bitola (número em mm, ex. 16.0), aco (string, ex. CA-50S), comp (comprimento unitário em cm, número), qtd (campo Conteúdo, quantidade de barras, número inteiro), obs (texto da observação, ex. PILARES P2,P3,P14 E P15 (x4)). ATENÇÃO: Desenho e Elemento são campos separados, mas na etiqueta o elemento costuma ser impresso colado ao fim do desenho (ex.: \"219-FL11NICHO\" é desenho 219-FL11 e elemento NICHO). Nesses casos devolva em desenho só o código do desenho e em elemento só o nome do elemento. Para barra reta: marca (texto de marca e produto, ex. ArcelorMittal 50 S), bitola (mm, número), comprimento (em metros, número), categoria (ex. CA50), norma (ex. ABNT NBR 7480/2024), corrida (ex. 27602/82), feixe (string, ex. 017), material (só dígitos, string), pliq (peso líquido em kg, número), lote (código impresso perto do fabricante, ex. PITL2 160420261903, se houver), cod (número do código de barras impresso, só dígitos). Para cordoalha: material (só dígitos, string), descricao (string), classe (campo \"Aço\", ex. BL82, string), diametro (mm, número), norma (string), ordem (Ordem de Produção, só dígitos, string), torcao (\"DIREITA\" ou \"ESQUERDA\"), resist (texto, ex. 190 kgf/mm²), pbruto (peso bruto em kg, número), pliq (peso líquido em kg, número), espessura (texto), metragem (em metros, número), re (dígitos do campo RE, só se legível), datafab (dd/mm/aaaa), cod (número do código de barras impresso, só dígitos). Use null para o que não se aplica ao tipo ou não estiver legível.",
   placa: 'A imagem mostra a placa de um veículo brasileiro (padrão Mercosul ou antigo). Ignore qualquer faixa de data e hora sobreposta na parte de baixo. Responda apenas com um objeto JSON {"placa": "ABC1D23"} com 7 caracteres, maiúsculas, sem hífen nem espaço. Use null se não estiver legível. Não invente.',
   cracha: 'A imagem mostra um documento de identificação do motorista: pode ser um crachá de identificação de obra ou empresa, uma CNH (Carteira Nacional de Habilitação) ou um RG (Carteira de Identidade). Ignore qualquer faixa ou carimbo de data, hora e endereço sobreposto na foto. Identifique o tipo de documento e siga rigorosamente estas regras: 1) Se for RG: localize o campo rotulado como "REGISTRO GERAL" (atenção: não pegue CPF nem outros números, pegue exatamente o número do campo REGISTRO GERAL, ex: "019365302001-9") e coloque na chave "registro_geral" e também na chave "cracha". Extraia o nome completo do campo NOME na chave "motorista". Coloque "empresa": null e "tipo_doc": "rg". 2) Se for CNH: localize o campo rotulado como "Nº REGISTRO" ou "5 Nº REGISTRO" (número de registro da CNH em destaque/vermelho, normalmente 11 dígitos; atenção: não pegue CPF nem Doc. Identidade) e coloque na chave "num_registro" e também na chave "cracha". Extraia o nome completo do campo NOME na chave "motorista". Coloque "empresa": null e "tipo_doc": "cnh". 3) Se for Crachá de obra ou empresa: extraia o nome completo na chave "motorista", o nome da empresa ou consórcio na chave "empresa", o número da matrícula ou do crachá na chave "cracha", e "tipo_doc": "cracha". Responda APENAS com um objeto JSON contendo as chaves: tipo_doc ("rg", "cnh" ou "cracha"), motorista (string ou null), empresa (string ou null), cracha (string ou null), registro_geral (string ou null), num_registro (string ou null). Use null para o que não estiver legível ou não constar. Não invente nada.'
 };
@@ -269,9 +307,7 @@ async function ler(req, res, user) {
       } catch (e) { console.log('Leitura barata falhou (' + dados.tipo + '): ' + e.message + ' — repetindo no modelo preciso.'); }
     }
     if (!parsed) parsed = await chamaModelo(MODEL, dados.tipo, prompt, img, 700, 45000);
-    if (dados.tipo === 'etiqueta' && parsed && typeof parsed.elemento === 'string' && parsed.elemento.trim()) {
-      parsed.elemento = PainelCalc.elementoPadrao(parsed.elemento, await mapaElementosServidor());   // etiqueta gasta: "LAJE" -> "LAJES"
-    }
+    if (dados.tipo === 'etiqueta' && parsed) await padronizaDesenhoElemento(parsed);   // "LAJE" -> "LAJES"; "219-FL11NICHO" -> desenho 219-FL11 + elemento NICHO
     if (dados && dados.tipo === 'cracha' && parsed && typeof parsed === 'object') {
       if (parsed.tipo_doc === 'rg' || parsed.registro_geral) {
         parsed.cracha = parsed.registro_geral || parsed.cracha || null;
@@ -777,9 +813,7 @@ async function salvarRegistro(req, res, user) {
 
   const { id, protocolo, op, at, controlador, patio, prod, photos, ...resto } = rec;
   const usuarioId = user ? user.id : null;
-  if ((prod || 'aco') === 'aco' && typeof resto.elemento === 'string' && resto.elemento.trim()) {
-    resto.elemento = PainelCalc.elementoPadrao(resto.elemento, await mapaElementosServidor());   // mesmo elemento, sempre com o mesmo nome
-  }
+  if ((prod || 'aco') === 'aco') await padronizaDesenhoElemento(resto);   // mesmo elemento, sempre com o mesmo nome; desenho sem o elemento colado
 
   const c = await pool.connect();
   try {

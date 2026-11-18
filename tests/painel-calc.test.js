@@ -337,5 +337,36 @@ secao('Elemento padronizado');
   eq('filtrar por LAJES traz as 10 etiquetas', PC.acoPronto(PC.normalizar(regs), { elemento: 'LAJES' }, HOJE).kpis.etiquetas, 10);
 }
 
+/* =============== 8) Desenho e Elemento impressos colados ("219-FL11NICHO") =============== */
+secao('Desenho e elemento colados');
+{
+  const cont = { LAJES: 658, NICHO: 321, 'LIGAÇ': 110, LONGA: 33, TRAVE: 20, SUPER: 79, LAJE: 3, FL11NICHO: 1 };
+  const m = PC.mapaElementos(cont), s = (d, e) => PC.separaDesenhoElemento(d, e, m);
+  const par = (nome, r, d, e) => { eq(nome + ' · desenho', r.desenho, d); eq(nome + ' · elemento', r.elemento, e); };
+  par('219-FL11NICHO + vazio', s('219-FL11NICHO', ''), '219-FL11', 'NICHO');
+  par('219-FL10NICHO + vazio', s('219-FL10NICHO', ''), '219-FL10', 'NICHO');
+  par('desenho e elemento colados nos dois campos (219-FL11NICHO / FL11NICHO)', s('219-FL11NICHO', 'FL11NICHO'), '219-FL11', 'NICHO');
+  par('desenho cortado + elemento com o início do desenho (219- / FL11NICHO)', s('219-', 'FL11NICHO'), '219-FL11', 'NICHO');
+  par('já correto (219-FL11 / NICHO)', s('219-FL11', 'NICHO'), '219-FL11', 'NICHO');
+  par('144FL11LONGA + vazio', s('144FL11LONGA', ''), '144FL11', 'LONGA'); par('144/FL13LONGA + vazio', s('144/FL13LONGA', ''), '144/FL13', 'LONGA');
+  par('144FL12LONGA / LONGA', s('144FL12LONGA', 'LONGA'), '144FL12', 'LONGA'); par('elemento incompleto colado: 219-FL10LAJE', s('219-FL10LAJE', ''), '219-FL10', 'LAJES');
+  par('desenho normal não muda (258 / LAJE)', s('258', 'LAJE'), '258', 'LAJES'); par('VT.20 não é elemento padrão', s('432', 'VT.20'), '432', 'VT.20');
+  par('conflito: outro elemento informado, não mexe', s('219-FL10NICHO', 'LAJES'), '219-FL10NICHO', 'LAJES');
+  par('nome sem número antes não separa (TRAVE)', s('TRAVE', ''), 'TRAVE', '');
+  par('tudo vazio', s('', ''), '', '');
+  const mk = (id, d, e, kg, pos) => ({ id, protocolo: id, op: 'mob', at: new Date(2026, 10, 12, 10, 0).toISOString(), controlador: 'T', patio: 'Marabá', prod: 'aco', os: '12', cod: '4512', cpt: 'DF301R', desenho: d, posicao: pos, cj: '42', elemento: e, bitola: 12.5, aco: 'CA-50S', comp: 158, qtd: 168, m: 265, kg, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' });
+  const regs = []; for (let i = 0; i < 8; i++) regs.push(mk('n' + i, '219-FL11', 'NICHO', 100, String(20 + i)));
+  regs.push(mk('g1', '219-FL11NICHO', '', 200, '30'), mk('g2', '219-FL11NICHO', 'FL11NICHO', 300, '31'), mk('g3', '219-', 'FL11NICHO', 400, '32'));
+  const A = PC.acoPronto(PC.normalizar(regs), {}, HOJE);
+  eq('Aço pronto: só 1 desenho (219-FL11)', A.kpis.desenhos, 1); eq('Aço pronto: só 1 elemento (NICHO)', A.kpis.elementos, 1);
+  eq('Aço pronto: NICHO soma tudo (t)', A.porElemento.find(e => e.rotulo === 'NICHO').t, 1.7);
+  eq('Aço pronto: desenho 219-FL11 soma tudo (t)', A.resumoDesenhos.find(r => r.desenho === '219-FL11').t, 1.7);
+  check('filtro Desenho lista só 219-FL11', A.opcoes.desenhos.join('|') === 'Todos|219-FL11', JSON.stringify(A.opcoes.desenhos));
+  eq('filtrar pelo desenho 219-FL11 traz as 11 etiquetas', PC.acoPronto(PC.normalizar(regs), { desenho: '219-FL11' }, HOJE).kpis.etiquetas, 11);
+  PC.setModoPlanilha(true);
+  eq('modo planilha não separa (reproduz o Excel)', PC.acoPronto(PC.normalizar(regs), {}, HOJE).kpis.desenhos, 3);
+  PC.setModoPlanilha(false);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

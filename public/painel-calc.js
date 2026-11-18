@@ -65,7 +65,37 @@
     var padroes = chaves.map(function (k) { return por[k]; }).filter(function (h) { return h.n >= 5; });   // candidatos a padrão
     chaves.forEach(function (k) { var p = escolhePadrao(k, por[k].n, padroes); if (p) mapa[k] = p; });
     Object.defineProperty(mapa, '__padroes', { value: padroes, enumerable: false });   // para valores novos, que ainda não estão nas contagens
+    // nomes (só letras, 4+) que identificam um elemento padrão, do maior para o menor: servem para achar o elemento colado ao desenho
+    var padrao = {};
+    padroes.forEach(function (h) { padrao[h.nome] = true; });
+    var nomes = chaves.filter(function (k) { return /^[A-Z]{4,}$/.test(k) && padrao[mapa[k]]; }).sort(function (a, b) { return b.length - a.length; });
+    Object.defineProperty(mapa, '__nomes', { value: nomes, enumerable: false });
     return mapa;
+  }
+  // Procura um elemento padrão no FIM do texto ("219-FL11NICHO" -> prefixo "219-FL11" + NICHO). O que vem antes tem que terminar em número.
+  function fimElemento(texto, mapa) {
+    var t = str(texto).trim(), k = chaveElem(t), nomes = (mapa && mapa.__nomes) || [], i, n;
+    for (i = 0; i < nomes.length; i++) {
+      n = nomes[i];
+      if (k.length > n.length && k.slice(-n.length) === n && /[0-9]$/.test(t.slice(0, t.length - n.length))) {
+        return { prefixo: t.slice(0, t.length - n.length), nome: mapa[n] };
+      }
+    }
+    return null;
+  }
+  // Etiqueta com Desenho e Elemento impressos colados: a IA leu "219-FL11NICHO" como desenho (ou "FL11NICHO" como elemento).
+  // Devolve o desenho e o elemento já separados e com o elemento padronizado. Se houver conflito (outro elemento já informado), não mexe.
+  function separaDesenhoElemento(desenho, elemento, mapa) {
+    var d = str(desenho).trim(), e = str(elemento).trim().toUpperCase();
+    var fd = fimElemento(d, mapa), fe = fimElemento(e, mapa), ep = elementoPadrao(e, mapa);
+    if (fd && (!e || ep === fd.nome || (fe && fe.nome === fd.nome))) {       // elemento colado no fim do desenho
+      return { desenho: fd.prefixo, elemento: fd.nome };
+    }
+    if (!fd && fe && d && d.slice(-fe.prefixo.length).toUpperCase() !== fe.prefixo.toUpperCase()) {  // o início do elemento é o fim do desenho
+      return { desenho: d + fe.prefixo, elemento: fe.nome };
+    }
+    if (fe) return { desenho: d, elemento: fe.nome };                         // elemento com prefixo que já está no desenho
+    return { desenho: d, elemento: ep };
   }
   function escolhePadrao(k, n, padroes) { // devolve o nome padrão para a chave k (com n registros), ou '' se não há candidato claro
     var cand = [];
@@ -213,12 +243,14 @@
     var dia = diaNum(d), min = d.getHours() * 60 + d.getMinutes();
     var produto = PRODUTOS[r.prod] || PRODUTOS.aco;
     var bit = cord ? diametroCord(r.bitola) : numOuNull(r.bitola);
+    var sep = modoPlanilha ? { desenho: str(r.desenho), elemento: str(r.elemento) }   // modo planilha: textos como vieram (reproduz o Excel)
+      : (r.prod || 'aco') === 'aco' ? separaDesenhoElemento(r.desenho, r.elemento, mapaElem) : { desenho: str(r.desenho), elemento: elementoPadrao(r.elemento, mapaElem) };
     var L = {
       id: r.id, protocolo: str(r.protocolo), operacao: OPERACOES[r.op] || str(r.op), patio: str(r.patio), produto: produto,
       dia: dia, min: min, ts: dia * 1440 + min, controlador: str(r.controlador),
       os: str(cord ? r.ordem : r.os), cod: str(r.cod), cpt: str(r.cpt), material: str(r.material), descricao: str(r.descricao || r.marca),
-      corrida: str(r.corrida), feixe: str(r.feixe), lote: str(r.lote), desenho: str(r.desenho), posicao: str(r.posicao), cj: str(r.cj),
-      elemento: elementoPadrao(r.elemento, mapaElem), bitola: bit, aco: str(r.aco), comp: numOuNull(r.comp), barras: cord ? 0 : num(r.qtd),
+      corrida: str(r.corrida), feixe: str(r.feixe), lote: str(r.lote), desenho: sep.desenho, posicao: str(r.posicao), cj: str(r.cj),
+      elemento: sep.elemento, bitola: bit, aco: str(r.aco), comp: numOuNull(r.comp), barras: cord ? 0 : num(r.qtd),
       metros: num(r.m), kg: num(r.kg), pbruto: numOuNull(r.pbruto), torcao: str(r.torcao), resist: str(r.resist), norma: str(r.norma),
       datafab: str(r.datafab), re: str(r.re), placa: str(r.placa), motorista: str(r.motorista), empresa: str(r.empresa), cracha: str(r.cracha),
       destino: str(r.destino), autorizador: str(r.autorizador), obs: str(r.obs),
@@ -563,7 +595,7 @@
   }
 
   return {
-    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao,
+    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao, separaDesenhoElemento: separaDesenhoElemento,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };
