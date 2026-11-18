@@ -123,7 +123,6 @@ async function initDb() {
       console.log('✓ Usuário padrão criado: login "admin", senha "admin"');
     }
     console.log('✓ Banco de dados PostgreSQL conectado e tabelas sincronizadas.');
-    await corrigirDesenhoElementoNoBanco();
   } catch (err) {
     console.warn('Aviso ao inicializar PostgreSQL:', err.message);
   }
@@ -159,33 +158,6 @@ async function padronizaDesenhoElemento(obj) {
   s.desenho = PainelCalc.desenhoPadrao(s.desenho, m.des);
   if (typeof obj.desenho === 'string' || s.desenho) obj.desenho = s.desenho;
   if (typeof obj.elemento === 'string' || s.elemento) obj.elemento = s.elemento;
-}
-
-// Correção dos registros já gravados (desenho e elemento colados, elemento incompleto, separador do desenho): roda ao iniciar, usa a mesma regra
-// do Painel e só mexe no que ainda difere do padrão. Os valores originais ficam em dados.desenhoOriginal / dados.elementoOriginal.
-async function corrigirDesenhoElementoNoBanco() {
-  try {
-    const r = await pool.query("SELECT coalesce(dados->>'desenho', '') AS d, coalesce(dados->>'elemento', '') AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' GROUP BY 1, 2");
-    const mapas = calculaMapasDesenho(r.rows);
-    const feitas = [];
-    for (const x of r.rows) {
-      const d = x.d || '', e = x.e || '';
-      if (!d.trim() && !e.trim()) continue;
-      const s = PainelCalc.separaDesenhoElemento(d, e, mapas.elem);
-      s.desenho = PainelCalc.desenhoPadrao(s.desenho, mapas.des);
-      if (s.desenho === d && s.elemento === e) continue;
-      const u = await pool.query(
-        `UPDATE registros SET dados = jsonb_set(jsonb_set(jsonb_set(jsonb_set(dados,
-            '{desenhoOriginal}', coalesce(dados->'desenhoOriginal', to_jsonb(coalesce(dados->>'desenho', '')))),
-            '{elementoOriginal}', coalesce(dados->'elementoOriginal', to_jsonb(coalesce(dados->>'elemento', '')))),
-            '{desenho}', to_jsonb($3::text)), '{elemento}', to_jsonb($4::text))
-         WHERE prod = 'aco' AND coalesce(dados->>'desenho', '') = $1 AND coalesce(dados->>'elemento', '') = $2`, [d, e, s.desenho, s.elemento]);
-      if (u.rowCount) feitas.push(JSON.stringify(d) + '/' + JSON.stringify(e) + ' → ' + JSON.stringify(s.desenho) + '/' + s.elemento + ' (' + u.rowCount + ')');
-    }
-    if (feitas.length) console.log('✓ Desenho/elemento corrigidos no banco: ' + feitas.join(', '));
-  } catch (e) {
-    console.warn('Aviso ao corrigir desenho/elemento no banco:', e.message);
-  }
 }
 
 // Obter usuário autenticado pela requisição
