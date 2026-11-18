@@ -286,7 +286,8 @@ async function ler(req, res, user) {
         else console.log('Leitura barata inválida (' + dados.tipo + '): repetindo no modelo preciso.');
       } catch (e) { console.log('Leitura barata falhou (' + dados.tipo + '): ' + e.message + ' — repetindo no modelo preciso.'); }
     }
-    if (!parsed) parsed = await chamaModelo(MODEL, dados.tipo, prompt, img, 700, 45000);
+    // 2000 tokens: o modelo também gasta tokens "pensando" antes do JSON; com 700 a resposta às vezes era cortada (stop_reason=max_tokens). Paga-se só o que for usado.
+    if (!parsed) parsed = await chamaModelo(MODEL, dados.tipo, prompt, img, 2000, 45000);
     if (dados.tipo === 'etiqueta' && parsed) await padronizaDesenhoElemento(parsed);   // "LAJE" -> "LAJES"; "219-FL11NICHO" -> desenho 219-FL11 + elemento NICHO
     if (dados && dados.tipo === 'cracha' && parsed && typeof parsed === 'object') {
       if (parsed.tipo_doc === 'rg' || parsed.registro_geral) {
