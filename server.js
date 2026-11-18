@@ -123,32 +123,8 @@ async function initDb() {
       console.log('✓ Usuário padrão criado: login "admin", senha "admin"');
     }
     console.log('✓ Banco de dados PostgreSQL conectado e tabelas sincronizadas.');
-    await padronizarElementosNoBanco();
   } catch (err) {
     console.warn('Aviso ao inicializar PostgreSQL:', err.message);
-  }
-}
-
-// Correção dos registros que já estavam gravados com o elemento incompleto ou em outra forma (LAJE, TRAV, SAÍDA, LIGAÇÃO...): roda ao
-// iniciar, usa a mesma regra do Painel e só mexe no que ainda difere do padrão. O valor original fica em dados.elementoOriginal.
-async function padronizarElementosNoBanco() {
-  try {
-    const r = await pool.query("SELECT dados->>'elemento' AS e, count(*)::int AS n FROM registros WHERE prod = 'aco' AND coalesce(trim(dados->>'elemento'), '') <> '' GROUP BY 1");
-    const cont = {};
-    r.rows.forEach(x => { const k = x.e.trim().toUpperCase(); cont[k] = (cont[k] || 0) + x.n; });
-    const mapa = PainelCalc.mapaElementos(cont);
-    const feitas = [];
-    for (const x of r.rows) {
-      const novo = PainelCalc.elementoPadrao(x.e, mapa);
-      if (!novo || novo === x.e) continue;
-      const u = await pool.query(
-        `UPDATE registros SET dados = jsonb_set(jsonb_set(dados, '{elementoOriginal}', coalesce(dados->'elementoOriginal', to_jsonb(dados->>'elemento'))), '{elemento}', to_jsonb($2::text))
-         WHERE prod = 'aco' AND dados->>'elemento' = $1`, [x.e, novo]);
-      if (u.rowCount) feitas.push(JSON.stringify(x.e) + '→' + novo + ' (' + u.rowCount + ')');
-    }
-    if (feitas.length) console.log('✓ Elementos padronizados no banco: ' + feitas.join(', '));
-  } catch (e) {
-    console.warn('Aviso ao padronizar os elementos no banco:', e.message);
   }
 }
 
