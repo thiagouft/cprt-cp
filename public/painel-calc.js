@@ -334,6 +334,7 @@
     L.local = ruaPadrao(L.destino);
     L.carga = str(r.carga);
     L.chaveEst = chaveEtiqueta(Object.assign({}, r, { op: '' })); // identifica a etiqueta física, igual para a entrada e a retirada dela
+    L.chaveSP = chaveEtiqueta(Object.assign({}, r, { op: '', kg: 1 })); // o mesmo, sem o peso: acha a mesma etiqueta lida com outro peso
     L.campos = [L.protocolo, L.operacao, L.patio, L.produto, fmtData(dia), fmtHora(min), L.controlador, L.os, L.cod, L.cpt, L.material,
       L.descricao, L.corrida, L.feixe, L.lote, L.desenho, L.posicao, L.cj, L.elemento, bit == null ? '' : fmtNum(bit), L.aco,
       L.comp == null ? '' : fmtNum(L.comp), cord ? '' : fmtNum(L.barras), fmtNum(L.metros), fmtNum(L.kg), L.pbruto == null ? '' : fmtNum(L.pbruto),
@@ -405,7 +406,7 @@
     var lim = limites(linhas, f, hoje), base = [], fin = [], i, L, ok;
     // Operação = Saldo: só o que entrou e ainda não saiu, por etiqueta (todos os produtos; o casamento é feito antes dos demais filtros)
     var modoSaldo = f.operacao === 'Saldo', est = null, fonte = linhas;
-    if (modoSaldo) { est = estoquePorEtiqueta(linhas); fonte = est.lista; }
+    if (modoSaldo) { est = estoquePorEtiqueta(linhas); fonte = est.lista; filtraOrfas(est, f, lim); }
     for (i = 0; i < fonte.length; i++) {
       L = fonte[i];
       ok = (todos(f.patio, 'Todos os pátios') || igual(L.patio, f.patio)) &&
@@ -492,24 +493,53 @@
   // Fica em estoque o que entrou e ainda não teve retirada correspondente. Entradas sem dados para identificar a etiqueta (sem chave)
   // são mantidas; retiradas sem entrada correspondente (ou sem chave) são ignoradas e contadas no aviso.
   function estoquePorEtiqueta(ap) {
-    var ord = ap.slice().sort(function (a, b) { return a.ts - b.ts; }), fila = {}, i, x, q, semChave = 0, orfas = 0, casadas = 0, fora = {};
+    var ord = ap.slice().sort(function (a, b) { return a.ts - b.ts; }), fila = {}, i, x, q, semChave = 0, casadas = 0, fora = {}, orfas = [];
+    var entChave = {}, entSemPeso = {};   // todas as entradas, por etiqueta, para explicar por que uma retirada ficou sem par
     for (i = 0; i < ord.length; i++) {
       x = ord[i];
-      if (!x.chaveEst) { if (x.operacao === 'Retirada') orfas++; else if (x.operacao === 'Entrada') semChave++; continue; }
+      if (x.operacao === 'Entrada') {
+        if (x.chaveEst) (entChave[x.chaveEst] = entChave[x.chaveEst] || []).push(x);
+        if (x.chaveSP) (entSemPeso[x.chaveSP] = entSemPeso[x.chaveSP] || []).push(x);
+      }
+    }
+    for (i = 0; i < ord.length; i++) {
+      x = ord[i];
+      if (!x.chaveEst) { if (x.operacao === 'Retirada') orfas.push(orfaDe(x, entChave, entSemPeso)); else if (x.operacao === 'Entrada') semChave++; continue; }
       q = fila[x.chaveEst] || (fila[x.chaveEst] = []);
       if (x.operacao === 'Entrada') q.push(x);
-      else if (x.operacao === 'Retirada') { if (q.length) { fora[q.shift().id] = true; casadas++; } else orfas++; }
+      else if (x.operacao === 'Retirada') { if (q.length) { fora[q.shift().id] = true; casadas++; } else orfas.push(orfaDe(x, entChave, entSemPeso)); }
     }
     return {
       lista: ap.filter(function (y) { return y.operacao === 'Entrada' && !fora[y.id]; }),
-      info: { casadas: casadas, retiradasSemEntrada: orfas, entradasSemChave: semChave }
+      info: { casadas: casadas, retiradasSemEntrada: orfas.length, entradasSemChave: semChave, orfas: orfas }
     };
+  }
+  // Retirada que não achou entrada: guarda o que ajuda a conferir (etiqueta, peso e o provável motivo)
+  function orfaDe(x, entChave, entSemPeso) {
+    var motivo, ref = '', es = x.chaveEst ? entChave[x.chaveEst] : null, sp = x.chaveSP ? entSemPeso[x.chaveSP] : null;
+    if (!x.chaveEst) motivo = 'Dados insuficientes para identificar a etiqueta (sem peso ou código)';
+    else if (es && es.length) {
+      if (es[0].ts > x.ts) { motivo = 'A entrada da mesma etiqueta é posterior à retirada (data trocada?)'; ref = es[0].protocolo; }
+      else { motivo = 'A entrada da mesma etiqueta já foi usada por outra retirada (retirada repetida?)'; ref = es[es.length - 1].protocolo; }
+    } else if (sp && sp.length) { motivo = 'Existe entrada da mesma etiqueta com outro peso'; ref = sp[0].protocolo; }
+    else motivo = 'Sem entrada no sistema (material de antes do uso?)';
+    var desc = x.produto === 'Barra reta' ? [x.descricao, x.corrida && 'corrida ' + x.corrida, x.feixe && 'feixe ' + x.feixe].filter(Boolean).join(' · ')
+      : x.produto === 'Cordoalha' ? [x.os && 'OP ' + x.os, x.material].filter(Boolean).join(' · ')
+      : [x.os && 'OS ' + x.os, [x.desenho, x.posicao].filter(Boolean).join('/'), x.cpt].filter(Boolean).join(' · ');
+    return { id: x.id, protocolo: x.protocolo, ts: x.ts, dia: x.dia, quando: fmtData(x.dia) + ' ' + fmtHora(x.min), patio: x.patio, produto: x.produto, etiqueta: desc, kg: x.kg, motivo: motivo, ref: ref };
+  }
+  // Mantém só as retiradas sem entrada que casam com os filtros da tela (pátio, produto e período); o número do aviso acompanha a lista
+  function filtraOrfas(est, f, lim, soProduto) {
+    var o = est.info.orfas.filter(function (r) {
+      return (todos(f.patio, 'Todos os pátios') || igual(r.patio, f.patio)) && (soProduto ? r.produto === soProduto : (todos(f.produto, 'Todos') || igual(r.produto, f.produto))) && r.dia >= lim.ini && r.dia <= lim.fim;
+    });
+    est.info.orfas = o; est.info.retiradasSemEntrada = o.length;
   }
   function acoPronto(linhas, f, hoje, opc) {
     f = f || {}; opc = opc || {};
     var lim = limites(linhas, f, hoje), ap = linhas.filter(function (x) { return x.produto === 'Aço pronto'; }), i, L;
     var modoSaldo = f.operacao === 'Saldo', est = null, base = ap;
-    if (modoSaldo) { est = estoquePorEtiqueta(ap); base = est.lista; }
+    if (modoSaldo) { est = estoquePorEtiqueta(ap); base = est.lista; filtraOrfas(est, f, lim, 'Aço pronto'); }
     var E = base.filter(function (L2) {
       return (todos(f.patio, 'Todos os pátios') || igual(L2.patio, f.patio)) &&
         (modoSaldo || todos(f.operacao, 'Todas') || igual(L2.operacao, f.operacao)) &&

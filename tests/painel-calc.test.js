@@ -450,6 +450,28 @@ secao('Painel geral · modo Saldo');
   eq('Saldo + Pátio inexistente: vazio', PC.painel(L, { operacao: 'Saldo', patio: 'São Félix' }, HOJE).kpis.registros, 0);
   eq('Entrada e Retirada continuam como antes', PC.painel(L, { operacao: 'Entrada' }, HOJE).kpis.registros, 5);
   eq('Saldo do Painel geral com Produto Aço pronto = Aço pronto/Saldo', PC.painel(L, { operacao: 'Saldo', produto: 'Aço pronto' }, HOJE).kpis.saldoT, PC.acoPronto(L, { operacao: 'Saldo' }, HOJE).kpis.saldoT);
+  // lista "retiradas sem entrada": o que conferir em cada uma
+  const o1 = s.estoque.orfas;
+  eq('lista: 1 retirada sem entrada (c9, cordoalha)', o1.length, 1); eq('lista: produto, protocolo e peso', [o1[0].produto, o1[0].protocolo, o1[0].kg].join('|'), 'Cordoalha|c9|3000');
+  check('lista: motivo "sem entrada no sistema"', /Sem entrada no sistema/.test(o1[0].motivo), o1[0].motivo); eq('lista: etiqueta descrita (OP + material)', o1[0].etiqueta, 'OP OP1');
+  eq('lista acompanha o filtro de Produto', PC.painel(L, { operacao: 'Saldo', produto: 'Barra reta' }, HOJE).estoque.orfas.length, 0);
+  eq('aviso (contagem) acompanha a lista filtrada', PC.painel(L, { operacao: 'Saldo', produto: 'Barra reta' }, HOJE).estoque.retiradasSemEntrada, 0);
+  const L2 = PC.normalizar([
+    A('p1', 'ret', 1, 8), A('p2', 'mob', 3, 8),                                                                          // retirada ANTES da entrada da mesma etiqueta
+    A('q1', 'mob', 1, 9, { posicao: '7', kg: 50 }), A('q1r', 'ret', 2, 9, { posicao: '7', kg: 50 }), A('q1r2', 'ret', 3, 9, { posicao: '7', kg: 50 }),   // mesma etiqueta retirada 2 vezes
+    A('w1', 'mob', 1, 10, { posicao: '8', kg: 70 }), A('w1r', 'ret', 2, 10, { posicao: '8', kg: 71 }),                    // retirada com peso diferente da entrada
+    A('z1', 'ret', 2, 11, { posicao: '9', kg: 0 }),                                                                      // retirada sem peso
+    A('v1', 'ret', 2, 12, { posicao: '10', kg: 10, patio: 'São Félix' })                                                 // sem entrada, em outro pátio
+  ]);
+  const ap = PC.acoPronto(L2, { operacao: 'Saldo' }, HOJE), por = {}; ap.estoque.orfas.forEach(x => { por[x.protocolo] = x; });
+  eq('aço: 5 retiradas sem entrada', ap.estoque.orfas.length, 5);
+  check('motivo: retirada antes da entrada (aponta a entrada p2)', /posterior/.test(por.p1.motivo) && por.p1.ref === 'p2', JSON.stringify(por.p1));
+  check('motivo: entrada já usada por outra retirada (aponta q1)', /já foi usada/.test(por.q1r2.motivo) && por.q1r2.ref === 'q1', JSON.stringify(por.q1r2));
+  check('motivo: mesma etiqueta com outro peso (aponta w1)', /outro peso/.test(por.w1r.motivo) && por.w1r.ref === 'w1', JSON.stringify(por.w1r));
+  check('motivo: sem dados para identificar', /insuficientes/.test(por.z1.motivo), por.z1.motivo); check('motivo: sem entrada no sistema', /Sem entrada/.test(por.v1.motivo), por.v1.motivo);
+  eq('lista filtra por pátio (São Félix: só v1)', PC.acoPronto(L2, { operacao: 'Saldo', patio: 'São Félix' }, HOJE).estoque.orfas.map(x => x.protocolo).join(','), 'v1');
+  eq('lista filtra por período (retiradas do dia 3: só q1r2)', PC.acoPronto(L2, { operacao: 'Saldo', de: '2026-11-03', ate: '2026-11-03' }, HOJE).estoque.orfas.map(x => x.protocolo).join(','), 'q1r2');
+  check('fora do modo Saldo não há lista', !PC.acoPronto(L2, { operacao: 'Todas' }, HOJE).estoque && !PC.painel(L2, { operacao: 'Todas' }, HOJE).estoque);
 }
 
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));

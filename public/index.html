@@ -283,7 +283,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=48"></script>
+<script src="painel-calc.js?v=49"></script>
 <script>
 (function(){
 'use strict';
@@ -1294,6 +1294,15 @@ function hbar(rot,val,max,seg,sub){
  return '<div class="hb"><div class="hl"><span>'+rot+'</span><b>'+nf(val,2)+' t</b></div><div class="ht">'+(seg||'<i class="pc0" style="width:'+w+'%"></i>')+'</div>'+(sub?'<div class="hs">'+sub+'</div>':'')+'</div>';
 }
 function pnSaldoCls(v){return v>0.0005?'pos':v<-0.0005?'neg':'';}
+// Modo Saldo: retiradas que não acharam a entrada da mesma etiqueta, com o provável motivo, para conferir e corrigir (Histórico → Alterar)
+function orfasHtml(e){
+ if(!e||!e.orfas||!e.orfas.length)return '';
+ const MAX=200,lista=e.orfas.slice().sort((a,b)=>b.ts-a.ts),n=lista.length;
+ const tr=lista.slice(0,MAX).map(o=>'<tr><td class="nw"><b>'+esc(o.protocolo)+'</b></td><td class="nw">'+esc(o.quando)+'</td><td class="nw">'+esc(o.patio)+'</td><td class="nw">'+esc(o.produto)+'</td><td>'+esc(o.etiqueta)+'</td><td class="r">'+nf(o.kg,2)+'</td><td style="min-width:260px">'+esc(o.motivo)+(o.ref?' <span class="muted">('+esc(o.ref)+')</span>':'')+'</td></tr>').join('');
+ const kg=lista.reduce((s,o)=>s+(o.kg||0),0);
+ return '<h2 class="sec">Retiradas sem entrada correspondente ('+nf(n,0)+' · '+nf(kg/1000,2)+' t)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Protocolo</th><th>Data / hora</th><th>Pátio</th><th>Produto</th><th>Etiqueta</th><th class="r">Peso (kg)</th><th>Provável motivo (entrada relacionada)</th></tr></thead><tbody>'+tr+'</tbody></table>'+
+  '<div class="hint muted" style="font-size:12.5px;margin-top:8px">Estas retiradas não entram no cálculo do estoque. Para corrigir, abra o registro no Histórico (busque pelo protocolo) e use <b>Alterar</b>; se a etiqueta é a mesma da entrada relacionada, confira data, peso e se não foi lançada duas vezes.'+(n>MAX?' Mostrando as '+MAX+' mais recentes de '+nf(n,0)+'.':'')+'</div></div>';
+}
 function pnBody(R){
  if(PX.carregando&&!PX.linhas.length)return '<div class="note mt">Carregando dados do banco…</div>';
  if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
@@ -1309,7 +1318,7 @@ function pnBody(R){
   kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro'))+
   kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' metros')+
   (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',mSaldo?'Estoque por etiqueta · média '+nf(k.mediaKg,0)+' kg / etiqueta':'Entradas − Retiradas',pnSaldoCls(k.saldoT)))+'</div>';
- const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas (de todos os produtos) que entraram e ainda não tiveram retirada correspondente. '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas.':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
+ const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas (de todos os produtos) que entraram e ainda não tiveram retirada correspondente. '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas (lista abaixo).':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
  if(!k.registros)return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+'<div class="card empty pn-empty mt"><b>Nenhum registro com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
  // peso por dia (retirada x entrada)
@@ -1343,7 +1352,7 @@ function pnBody(R){
  const tr=R.ultimos.map(u=>'<tr><td><span class="pill '+(u.operacao==='Retirada'?'ret':'mob')+'">'+esc(u.operacao)+'</span></td><td class="nw"><b>'+esc(u.placa)+'</b></td><td class="nw">'+esc(u.data)+'</td><td>'+esc(u.hora)+'</td><td class="nw">'+esc(u.patio)+'</td><td class="nw">'+esc(u.produto)+'</td><td class="r">'+(u.bitola==null?'':nf(u.bitola,u.bitola%1?1:0))+'</td><td class="r">'+(u.produto==='Cordoalha'?'':nf(u.barras,0))+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.motorista)+'</td><td class="nw">'+esc(u.controlador)+'</td><td>'+esc(u.rua)+'</td></tr>').join('');
  const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Localização</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
 
- return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+cargas+ult+
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+orfasHtml(e)+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+cargas+ult+
   '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.'+(semSaldo?' Com Operação = '+esc(f.operacao)+' não há saldo (ele precisa de entradas e retiradas): escolha <b>Todas</b> para o saldo em números ou <b>Saldo</b> para o estoque por etiqueta.':mSaldo?' O modo Saldo só é confiável se as retiradas também forem lançadas.':'')+'</div>';
 }
 function diasHtml(serie,janela,act,t7,tp){
@@ -1403,7 +1412,7 @@ function acBody(R){
   kp('Ordens (OS)',nf(k.os,0),nf(k.cj,0)+' conjuntos (CJ)')+
   kp('Elementos',nf(k.elementos,0),'Maior peso: '+esc(k.maiorElemento))+
   (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',nf(k.saldoBarras,0)+' barras · '+nf(k.saldoEtiquetas,0)+' etiquetas ('+(mSaldo?'estoque por etiqueta':'entradas − retiradas')+')',pnSaldoCls(k.saldoT)))+'</div>';
- const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas que entraram e ainda não tiveram retirada correspondente (mesmos dados e peso; cada retirada tira a entrada mais antiga da mesma etiqueta). '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas.':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
+ const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas que entraram e ainda não tiveram retirada correspondente (mesmos dados e peso; cada retirada tira a entrada mais antiga da mesma etiqueta). '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas (lista abaixo).':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
  if(!k.etiquetas)return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+'<div class="card empty pn-empty mt"><b>Nenhuma etiqueta com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
  // onde está o aço (Operação | Pátio | Localização)
@@ -1441,7 +1450,7 @@ function acBody(R){
  const trU=R.ultimas.map(u=>'<tr><td class="nw">'+esc(u.data)+' '+esc(u.hora)+'</td><td class="nw">'+esc(u.os)+'</td><td>'+pillOp(u.operacao)+'</td><td class="nw">'+esc(u.cpt)+'</td><td class="nw"><b>'+esc(u.desenho)+'</b></td><td class="nw">'+esc(u.posicao)+'</td><td class="nw">'+esc(u.cj)+'</td><td class="nw">'+esc(u.elemento)+'</td><td class="r">'+(u.bitola==null?'':PainelCalc.fmtNum(u.bitola))+'</td><td class="r">'+(u.comp==null?'':nf(u.comp,0))+'</td><td class="r">'+nf(u.barras,0)+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.local)+'</td><td style="min-width:200px">'+esc(u.obs)+'</td></tr>').join('');
  const ult='<h2 class="sec">Últimas '+R.ultimas.length+' etiquetas de aço pronto (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Data / hora</th><th>OS</th><th>Operação</th><th>CPT/CPM/DF</th><th>Desenho</th><th>Posição</th><th>CJ</th><th>Elemento</th><th class="r">Bitola</th><th class="r">Comp. (cm)</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Pátio · Localização</th><th>Observações</th></tr></thead><tbody>'+trU+'</tbody></table></div>';
 
- return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+orfasHtml(e)+onde+saldo+'<div class="pn-2">'+gEl+gDe+'</div>'+gBi+gDi+matriz+resD+ult+
   '<div class="note mt">Fonte: registros de Aço pronto do sistema (mesmas colunas do Histórico e do CSV). '+(semSaldo?'Com Operação = '+esc(f.operacao)+' não há saldo (ele precisa de entradas e retiradas). Escolha <b>Todas</b> para ver o saldo em números ou <b>Saldo</b> para listar só o que ainda está no pátio.':mSaldo?'O modo Saldo só é confiável se as retiradas também forem lançadas.':'O saldo é a soma das entradas menos as retiradas registradas; ele só reflete a realidade se as retiradas também forem lançadas.')+'</div>';
 }
 function acFiltro(t){
