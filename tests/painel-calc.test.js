@@ -354,6 +354,15 @@ secao('Desenho e elemento colados');
   par('conflito: outro elemento informado, não mexe', s('219-FL10NICHO', 'LAJES'), '219-FL10NICHO', 'LAJES');
   par('nome sem número antes não separa (TRAVE)', s('TRAVE', ''), 'TRAVE', '');
   par('tudo vazio', s('', ''), '', '');
+  {
+    const m2 = PC.mapaElementos(Object.assign({}, cont, { 'CA-25': 1, 'VT.20': 3, PMF3: 1, CABO: 2 })), s2 = (d, e) => PC.separaDesenhoElemento(d, e, m2);
+    par('CA25/430CA-25 + vazio → CA25/430 + CA-25', s2('CA25/430CA-25', ''), 'CA25/430', 'CA-25');
+    par('CA25/430CA-25 + CA-25', s2('CA25/430CA-25', 'CA-25'), 'CA25/430', 'CA-25');
+    par('CA25/430 + CA-25 já correto', s2('CA25/430', 'CA-25'), 'CA25/430', 'CA-25');
+    par('432VT.20 colado → 432 + VT.20', s2('432VT.20', ''), '432', 'VT.20'); par('464-2PMF3 → 464-2 + PMF3', s2('464-2PMF3', ''), '464-2', 'PMF3');
+    par('desenho que só termina parecido não parte (CA25)', s2('CA25', ''), 'CA25', ''); par('número no meio não vira elemento (219FL11NICHO fica 219FL11 + NICHO)', s2('219FL11NICHO', ''), '219FL11', 'NICHO');
+    par('VT.20 já separado continua', s2('432', 'VT.20'), '432', 'VT.20');
+  }
   const mk = (id, d, e, kg, pos) => ({ id, protocolo: id, op: 'mob', at: new Date(2026, 10, 12, 10, 0).toISOString(), controlador: 'T', patio: 'Marabá', prod: 'aco', os: '12', cod: '4512', cpt: 'DF301R', desenho: d, posicao: pos, cj: '42', elemento: e, bitola: 12.5, aco: 'CA-50S', comp: 158, qtd: 168, m: 265, kg, placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' });
   const regs = []; for (let i = 0; i < 8; i++) regs.push(mk('n' + i, '219-FL11', 'NICHO', 100, String(20 + i)));
   regs.push(mk('g1', '219-FL11NICHO', '', 200, '30'), mk('g2', '219-FL11NICHO', 'FL11NICHO', 300, '31'), mk('g3', '219-', 'FL11NICHO', 400, '32'));

@@ -76,7 +76,9 @@
     // nomes (só letras, 4+) que identificam um elemento padrão, do maior para o menor: servem para achar o elemento colado ao desenho
     var padrao = {};
     padroes.forEach(function (h) { padrao[h.nome] = true; });
-    var nomes = chaves.filter(function (k) { return /^[A-Z]{4,}$/.test(k) && padrao[mapa[k]]; }).sort(function (a, b) { return b.length - a.length; });
+    // Nomes só de letras (4+) precisam ser um padrão bem usado. Códigos de letras + número (CA-25, VT.20, PMF3) valem mesmo pouco usados,
+    // porque o formato já os identifica; lixo como "FL11NICHO" (número no meio) não entra.
+    var nomes = chaves.filter(function (k) { return (/^[A-Z]{4,}$/.test(k) && padrao[mapa[k]]) || /^[A-Z]{2,4}[-.]?[0-9]{1,3}$/.test(k); }).sort(function (a, b) { return b.length - a.length; });
     Object.defineProperty(mapa, '__nomes', { value: nomes, enumerable: false });
     return mapa;
   }
