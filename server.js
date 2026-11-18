@@ -744,6 +744,18 @@ async function repetidaRegistro(req, res, user) {
   }
 }
 
+// Desenhos do aço pronto já registrados, com a quantidade de registros (o app sugere o desenho certo quando a leitura vem cortada).
+async function listarDesenhos(req, res, user) {
+  if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
+  try {
+    const r = await pool.query(`SELECT dados->>'desenho' AS d, count(*)::int AS n FROM registros WHERE prod = 'aco' AND coalesce(trim(dados->>'desenho'), '') <> '' GROUP BY 1 ORDER BY n DESC LIMIT 1500`);
+    return json(res, 200, { ok: true, desenhos: r.rows });
+  } catch (e) {
+    console.error('Erro ao listar desenhos:', e);
+    return json(res, 500, { erro: 'Erro ao consultar banco de dados.' });
+  }
+}
+
 // Localizações já usadas (para as sugestões do campo), das mais frequentes para as menos.
 async function listarLocalizacoes(req, res, user) {
   if (!user && !tokenOk(req)) return json(res, 401, { erro: 'Não autenticado.' });
@@ -873,29 +885,90 @@ async function protocoloLivre(c, pedido, op, at) {
 
 // Alteração de um registro já gravado (ex.: pátio escolhido errado). Exige a permissão "pode_editar" e guarda quem alterou, quando e o que mudou.
 const PATIOS_VALIDOS = ['Marabá', 'São Félix'];
-const CAMPOS_ALTERAVEIS = ['patio', 'placa', 'motorista', 'empresa', 'cracha', 'destino', 'autorizador', 'obs'];
-const CAMPOS_DA_CARGA = ['patio', 'placa', 'motorista', 'empresa', 'cracha', 'destino', 'autorizador']; // valem para a carga inteira (obs é de cada etiqueta)
+// Campos de cada produto (nome no registro -> tipo de validação). A regra é a mesma para aço pronto, barra reta e cordoalha.
+const ESPEC_COMUM = { patio: 'patio', placa: 'placa', motorista: 'req', destino: 'req', autorizador: 'req', empresa: 't', cracha: 't', obs: 't' };
+const ESPEC_PRODUTO = {
+  aco: { os: 't', cod: 't', cpt: 'cpt', desenho: 't', posicao: 't', elemento: 'elem', cj: 't', bitola: 'bitola', aco: 't', comp: 'pos', qtd: 'posint' },
+  barra: { marca: 't', aco: 't', bitola: 'bitola', comp: 'pos', kg: 'pos', qtd: 'int0', feixe: 't', corrida: 't', material: 't', lote: 't', norma: 't', cod: 't' },
+  cord: { material: 't', ordem: 't', descricao: 't', aco: 't', bitola: 'diam', norma: 't', torcao: 'torcao', resist: 't', espessura: 't', pbruto: 'num0', kg: 'pos', m: 'pos', re: 't', datafab: 't', cod: 't' }
+};
+const CAMPOS_DA_CARGA = ['patio', 'placa', 'motorista', 'empresa', 'cracha', 'destino', 'autorizador']; // valem para a carga inteira (obs e os dados do material são de cada etiqueta)
+function numeroBR(x) { // "1.234,5" -> 1234.5; "12.700" (3 casas) -> 12700 como no app; número passa direto
+  if (typeof x === 'number') return x;
+  let t = String(x == null ? '' : x).trim().replace(/\s/g, '');
+  if (!t) return NaN;
+  if (t.indexOf(',') > -1) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  return parseFloat(t);
+}
+function erroEdicao(msg) { return Object.assign(new Error(msg), { edicao: true }); }
+function limpaCampo(tipo, bruto) { // valida/normaliza um valor vindo do app; lança erroEdicao se for inválido
+  const txt = String(bruto == null ? '' : bruto).trim().slice(0, 200);
+  switch (tipo) {
+    case 't': return txt;
+    case 'req': if (!txt) throw erroEdicao('Preencha motorista, localização e autorizador.'); return txt;
+    case 'elem': return txt.toUpperCase();
+    case 'cpt': return txt.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);   // mesma regra do campo no app
+    case 'patio': if (PATIOS_VALIDOS.indexOf(txt) < 0) throw erroEdicao('Pátio inválido.'); return txt;
+    case 'placa': { const p = txt.toUpperCase().replace(/[^A-Z0-9]/g, ''); if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(p)) throw erroEdicao('Placa inválida. Use o formato ABC1D23 ou ABC1234.'); return p; }
+    case 'bitola': { const n = numeroBR(bruto), k = isFinite(n) ? n.toFixed(1) : ''; if (!PainelCalc.KGM[k]) throw erroEdicao('Bitola inválida.'); return k; }
+    case 'diam': { const d = PainelCalc.diametroCord(bruto); if (d == null) throw erroEdicao('Diâmetro inválido.'); return String(d); }
+    case 'pos': { const n = numeroBR(bruto); if (!(n > 0) || !isFinite(n)) throw erroEdicao('Informe um número maior que zero.'); return n; }
+    case 'posint': { const n = Math.round(numeroBR(bruto)); if (!(n > 0) || !isFinite(n)) throw erroEdicao('Informe uma quantidade inteira maior que zero.'); return n; }
+    case 'int0': { if (txt === '') return 0; const n = Math.round(numeroBR(bruto)); if (!(n >= 0) || !isFinite(n)) throw erroEdicao('Quantidade inválida.'); return n; }
+    case 'num0': { if (txt === '') return null; const n = numeroBR(bruto); if (!(n >= 0) || !isFinite(n)) throw erroEdicao('Valor numérico inválido.'); return n; }
+    case 'torcao': { const t = txt.toUpperCase(); if (t !== 'DIREITA' && t !== 'ESQUERDA') throw erroEdicao('Sentido de torção inválido.'); return t; }
+  }
+  return txt;
+}
+function mesmoValor(a, b) { // compara o que está gravado com o novo, sem diferença de tipo (texto x número)
+  const sa = String(a == null ? '' : a), sb = String(b == null ? '' : b);
+  if (sa === sb) return true;
+  const na = Number(a), nb = Number(b);
+  return sa !== '' && sb !== '' && isFinite(na) && isFinite(nb) && Math.abs(na - nb) < 1e-6;
+}
+// Valores que dependem dos que mudaram (peso e metros do aço pronto, metros e barras da barra reta), recalculados como no cadastro.
+function derivadosDoRegistro(prod, dados, aplicar) {
+  const mesclado = Object.assign({}, dados, aplicar), muda = k => aplicar[k] !== undefined, extra = {};
+  if (prod === 'aco' && (muda('bitola') || muda('comp') || muda('qtd'))) {
+    const p = PainelCalc.pesoAco(mesclado.bitola, Number(mesclado.comp), Number(mesclado.qtd));
+    if (!p) throw erroEdicao('Informe bitola, comprimento e quantidade válidos para calcular o peso.');
+    extra.kg = p.kg; extra.m = p.m;
+  }
+  if (prod === 'barra' && (muda('kg') || muda('bitola') || muda('comp') || muda('qtd'))) {
+    const kgm = PainelCalc.KGM[mesclado.bitola], kg = Number(mesclado.kg);
+    if (!kgm || !(kg > 0)) throw erroEdicao('Informe bitola e peso válidos.');
+    extra.m = kg / kgm;
+    if (muda('qtd')) { extra.barrasContadas = aplicar.qtd > 0; if (!(aplicar.qtd > 0)) extra.qtd = Math.max(1, Math.round(extra.m / ((Number(mesclado.comp) || 1200) / 100))); }
+    if (!mesclado.barrasContadas && extra.barrasContadas !== true && !muda('qtd')) extra.qtd = Math.max(1, Math.round(extra.m / ((Number(mesclado.comp) || 1200) / 100)));   // estimativa pelo peso
+  }
+  return extra;
+}
 async function alterarRegistro(req, res, user, id) {
   if (!user) return json(res, 401, { erro: 'Não autenticado.' });
   if (!podeEditarRegistro(user)) return json(res, 403, { erro: 'Você não tem permissão para alterar registros.' });
   let body;
   try { body = JSON.parse(await lerCorpo(req)); } catch (e) { return json(res, 400, { erro: 'Dados inválidos.' }); }
   const entrada = body && body.campos && typeof body.campos === 'object' ? body.campos : {};
-  const novos = {};
-  for (const k of CAMPOS_ALTERAVEIS) {
-    if (entrada[k] === undefined || entrada[k] === null) continue;
-    let v = String(entrada[k]).trim().slice(0, 200);
-    if (k === 'placa') { v = v.toUpperCase().replace(/[^A-Z0-9]/g, ''); if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(v)) return json(res, 400, { erro: 'Placa inválida. Use o formato ABC1D23 ou ABC1234.' }); }
-    if (k === 'patio' && PATIOS_VALIDOS.indexOf(v) < 0) return json(res, 400, { erro: 'Pátio inválido.' });
-    if ((k === 'motorista' || k === 'destino' || k === 'autorizador') && !v) return json(res, 400, { erro: 'Preencha motorista, localização e autorizador.' });
-    novos[k] = v;
-  }
-  if (!Object.keys(novos).length) return json(res, 400, { erro: 'Nenhuma alteração informada.' });
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
-    const alvo = await c.query('SELECT id, patio, dados FROM registros WHERE id = $1 FOR UPDATE', [id]);
+    const alvo = await c.query('SELECT id, patio, prod, dados FROM registros WHERE id = $1 FOR UPDATE', [id]);
     if (!alvo.rows.length) { await c.query('ROLLBACK'); return json(res, 404, { erro: 'Registro não encontrado.' }); }
+    const prod = alvo.rows[0].prod || 'aco', espec = Object.assign({}, ESPEC_COMUM, ESPEC_PRODUTO[prod] || {});
+    const novos = {};
+    for (const k of Object.keys(entrada)) {
+      if (entrada[k] === undefined) continue;
+      if (!espec[k]) throw erroEdicao('O campo "' + k + '" não pode ser alterado neste tipo de registro.');
+      novos[k] = limpaCampo(espec[k], entrada[k]);
+    }
+    if (!Object.keys(novos).length) throw erroEdicao('Nenhuma alteração informada.');
+    if (prod === 'aco' && (novos.desenho !== undefined || novos.elemento !== undefined)) {   // mesma padronização da leitura da foto (elemento padrão, desenho sem o elemento colado)
+      const par = { desenho: novos.desenho !== undefined ? novos.desenho : String((alvo.rows[0].dados || {}).desenho || ''), elemento: novos.elemento !== undefined ? novos.elemento : String((alvo.rows[0].dados || {}).elemento || '') };
+      await padronizaDesenhoElemento(par);
+      if (novos.desenho !== undefined) novos.desenho = par.desenho;
+      if (novos.elemento !== undefined) novos.elemento = par.elemento;
+    }
     let ids = [id];
     const cargaId = alvo.rows[0].dados && alvo.rows[0].dados.carga;
     if (body.cargaInteira && cargaId) {
@@ -908,10 +981,14 @@ async function alterarRegistro(req, res, user, id) {
       if (!r) continue;
       const aplicar = {};
       for (const k of Object.keys(novos)) { if (rid === id || CAMPOS_DA_CARGA.indexOf(k) > -1) aplicar[k] = novos[k]; }
+      const dadosAtuais = r.dados || {};
+      const mudou = {};   // só o que realmente muda entra no cálculo dos valores derivados
+      for (const k of Object.keys(aplicar)) { if (!mesmoValor(k === 'patio' ? (r.patio || '') : dadosAtuais[k], aplicar[k])) mudou[k] = aplicar[k]; }
+      if (rid === id && Object.keys(mudou).length) Object.assign(aplicar, derivadosDoRegistro(prod, dadosAtuais, mudou));
       const de = {}, para = {};
       for (const k of Object.keys(aplicar)) {
-        const atual = k === 'patio' ? (r.patio || '') : String((r.dados && r.dados[k]) || '');
-        if (atual !== aplicar[k]) { de[k] = atual; para[k] = aplicar[k]; }
+        const atual = k === 'patio' ? (r.patio || '') : dadosAtuais[k];
+        if (!mesmoValor(atual, aplicar[k])) { de[k] = atual == null ? '' : atual; para[k] = aplicar[k]; }
       }
       if (!Object.keys(para).length) continue;
       const dadosNovos = Object.assign({}, r.dados);
@@ -923,9 +1000,11 @@ async function alterarRegistro(req, res, user, id) {
       alterados.push({ id: rid, campos: para });
     }
     await c.query('COMMIT');
+    mapasCache.em = 0;   // desenho/elemento podem ter mudado: a próxima padronização recalcula
     return json(res, 200, { ok: true, alterados });
   } catch (e) {
     try { await c.query('ROLLBACK'); } catch (e2) {}
+    if (e && e.edicao) return json(res, 400, { erro: e.message });
     console.error('Erro ao alterar registro:', e.message);
     return json(res, 500, { erro: 'Erro ao alterar registro.' });
   } finally {
@@ -1026,6 +1105,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/registros/exportar' && req.method === 'GET') return exportarRegistros(req, res, user);
   if (p === '/api/registros/repetida' && req.method === 'POST') return repetidaRegistro(req, res, user);
   if (p === '/api/localizacoes' && req.method === 'GET') return listarLocalizacoes(req, res, user);
+  if (p === '/api/desenhos' && req.method === 'GET') return listarDesenhos(req, res, user);
   if (p === '/api/registros' && req.method === 'GET') return listarRegistros(req, res, user);
   if (p === '/api/registros' && req.method === 'POST') return salvarRegistro(req, res, user);
   if (p.startsWith('/api/registros/') && p.endsWith('/fotos') && req.method === 'GET') {

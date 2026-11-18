@@ -396,5 +396,23 @@ secao('Desenho com separador variável');
   PC.setModoPlanilha(false);
 }
 
+/* =============== 10) Sugestão de desenho quando a impressão come um caractere =============== */
+secao('Sugestão de desenho');
+{
+  const conhecidos = [{ d: '144/FL11', n: 7 }, { d: '144/FL12', n: 2 }, { d: '144/FL13', n: 8 }, { d: '144/FL1', n: 1 }, { d: '219-FL10', n: 29 }, { d: '219-FL12', n: 10 }, { d: '177-2', n: 5 }, { d: '177-3', n: 5 }, { d: '258', n: 12 }];
+  const s = v => PC.desenhosParecidos(v, conhecidos);
+  eq('144FL1 (dígito comido) sugere 144/FL13, 144/FL11 e 144/FL12', s('144FL1').join(' | '), '144/FL13 | 144/FL11 | 144/FL12');
+  eq('144/FL1 (já gravado, 1 registro) também sugere', s('144/FL1').join(' | '), '144/FL13 | 144/FL11 | 144/FL12');
+  eq('44FL12 (falta o 1 do começo) sugere 144/FL12', s('44FL12').join(' | '), '144/FL12');
+  eq('219-FL1 sugere 219-FL10 e 219-FL12', s('219-FL1').join(' | '), '219-FL10 | 219-FL12');
+  check('desenho correto e conhecido não sugere nada', s('144/FL11').length === 0 && s('219-FL10').length === 0 && s('258').length === 0);
+  check('ignora separador: 144FL11 já existe como 144/FL11', s('144FL11').length === 0);
+  check('desenho totalmente novo não sugere', s('555-FL3').length === 0);
+  check('troca de um dígito não é "comido": 219-FL13 não sugere', s('219-FL13').length === 0);
+  check('curto demais, vazio e sem lista não sugere', s('14').length === 0 && s('').length === 0 && PC.desenhosParecidos('144FL1', [], 4).length === 0 && PC.desenhosParecidos('144FL1', null, 4).length === 0);
+  eq('limite de sugestões', PC.desenhosParecidos('144FL1', conhecidos, 1).join(','), '144/FL13');
+  check('só sugere desenhos usados 2+ vezes (não sugere 144/FL1 com 1 registro)', s('144FL').indexOf('144/FL1') < 0, JSON.stringify(s('144FL')));
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

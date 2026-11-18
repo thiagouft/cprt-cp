@@ -86,14 +86,21 @@ h2.sec .n{background:var(--ink);color:var(--surface);width:22px;height:22px;bord
 .opbar .t{font-family:var(--font-d);font-size:22px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .opbar.ret .t{color:var(--ret)} .opbar.mob .t{color:var(--mob)}
 .opbar .s{font-size:13px;color:var(--muted)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:11px 16px;font-weight:600;cursor:pointer;min-height:46px;text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:7px 13px;font-weight:600;font-size:14px;line-height:1.2;cursor:pointer;min-height:38px;text-decoration:none}
+.btn svg.ic{width:16px;height:16px}
+.acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.acts .btn{width:100%;min-width:0}
+.row .btn{flex:1 1 auto}
+.subt{margin:16px 0 8px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .btn:hover{background:var(--surface2)}
 .btn.pri{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
 .btn.pri:hover{filter:brightness(1.08)}
 .btn.acc{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.acc:hover{filter:brightness(1.05)}
 .btn.danger{color:var(--bad);border-color:var(--bad)}
-.btn.sm{min-height:38px;padding:7px 12px;font-size:14px;border-radius:10px}
+.btn.sm{min-height:30px;padding:4px 10px;font-size:13px;border-radius:8px}
+.btn.sm svg.ic{width:14px;height:14px}
+.btn.block{min-height:44px;font-size:15px}
 .btn.block{width:100%}
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .prog{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:13.5px;color:var(--muted);font-weight:600}
@@ -269,7 +276,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=43"></script>
+<script src="painel-calc.js?v=45"></script>
 <script>
 (function(){
 'use strict';
@@ -379,7 +386,7 @@ function userPodeVerPainel(u){
 
 const KGM={'5.0':0.154,'6.3':0.245,'8.0':0.395,'10.0':0.617,'12.5':0.963,'16.0':1.578,'20.0':2.466,'25.0':3.853,'32.0':6.313,'40.0':9.865};
 const ACOS=['CA-50S','CA-60','CA-25'];
-const ELEM=['PILAR','BLOCO','SAPATA','ESTACA','VIGA','LAJE','TRAVESSA','ENCONTRO','CORTINA','LONGARINA','TRANSVERSINA'];
+const ELEM=['PILAR','BLOCO','SAPATA','ESTACA','VIGA','LAJES','TRAVESSA','ENCONTRO','CORTINA','LONGARINA','TRANSVERSINA'];
 const OPS={
   ret:{label:'Retirada',pre:'RET',desc:'Aço sai do pátio com transportador identificado.',destL:'Localização',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Autorizado por',autP:'Nome de quem autorizou'},
   mob:{label:'Entrada',pre:'ENT',desc:'Material recebido no pátio com o transportador identificado.',destL:'Localização',destP:'ex.: Pátio de Ferragens III, CPRT',autL:'Conferido por',autP:'Nome de quem conferiu o recebimento'}
@@ -651,7 +658,7 @@ function vMudarSenha(){
   '<input id="pwd-conf" type="password" placeholder="Digite a nova senha novamente" required autocomplete="new-password">'+
   '</div>'+
   '<div id="pwd-err" class="alert" style="display:none;margin-bottom:14px;color:var(--bad);background:var(--bad-bg);padding:10px 14px;border-radius:10px;font-size:14px"></div>'+
-  '<button type="submit" class="btn pri block" id="btn-pwd-submit" style="font-size:16px;font-weight:700">Salvar Nova Senha</button>'+
+  '<button type="submit" class="btn pri block" id="btn-pwd-submit" style="font-size:16px;font-weight:700">Salvar senha</button>'+
   '</form>'+
   '</div></div>';
 }
@@ -686,7 +693,7 @@ async function doMudarSenha(){
   if(!res.ok||!data.ok){
    errEl.textContent=data.erro||'Erro ao alterar a senha.';
    errEl.style.display='block';
-   btn.disabled=false;btn.textContent='Salvar Nova Senha';
+   btn.disabled=false;btn.textContent='Salvar senha';
    return;
   }
   Auth.user.trocar_senha=false;
@@ -702,7 +709,7 @@ async function doMudarSenha(){
  }catch(e){
   errEl.textContent='Erro ao conectar ao servidor.';
   errEl.style.display='block';
-  btn.disabled=false;btn.textContent='Salvar Nova Senha';
+  btn.disabled=false;btn.textContent='Salvar senha';
  }
 }
 
@@ -745,7 +752,7 @@ function vUsuarios(){
  '</div>'+
  '</div>'+
  '<div class="row mt" id="cad-user-actions">'+
- '<button type="submit" class="btn pri block" id="btn-cad-user" style="font-weight:700">'+ic('plus')+'Cadastrar Usuário</button>'+
+ '<button type="submit" class="btn pri block" id="btn-cad-user" style="font-weight:700">'+ic('plus')+'Cadastrar</button>'+
  '</div>'+
  '</form>'+
  '</div>'+
@@ -837,12 +844,12 @@ async function carregarListaUsuarios(){
     (u.trocar_senha?' · <span style="color:var(--bad);font-weight:600">Aguardando troca de senha</span>':'')+
     '</div></div>'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-    (isLogadoMaster?'<button class="btn sm" data-act="editnome" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Alterar Nome</button><button class="btn sm" data-act="cadeditar" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Editar no Cadastro</button>':'')+
-    '<button class="btn sm" data-act="resetpwd" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">Resetar Senha</button>'+
-    (!isMaster?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar Exclusão':'Permitir Exclusão')+'</button>':'')+
-    (!isMaster?'<button class="btn sm" data-act="togglemanage" data-id="'+u.id+'" data-pode="'+(u.pode_gerenciar_usuarios?0:1)+'">'+(u.pode_gerenciar_usuarios?'Revogar Gestão':'Permitir Gestão')+'</button>':'')+
-    (!isAdmin?'<button class="btn sm" data-act="togglepainel" data-id="'+u.id+'" data-pode="'+(u.pode_ver_painel?0:1)+'">'+(u.pode_ver_painel?'Revogar Painel':'Permitir Painel')+'</button>':'')+
-    (!isAdmin?'<button class="btn sm" data-act="toggleedit" data-id="'+u.id+'" data-pode="'+(u.pode_editar?0:1)+'">'+(u.pode_editar?'Revogar Alteração':'Permitir Alteração')+'</button>':'')+
+    (isLogadoMaster?'<button class="btn sm" data-act="editnome" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Alterar nome</button><button class="btn sm" data-act="cadeditar" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'" data-login="'+esc(u.login)+'">Editar cadastro</button>':'')+
+    '<button class="btn sm" data-act="resetpwd" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">Resetar senha</button>'+
+    (!isMaster?'<button class="btn sm" data-act="toggleperm" data-id="'+u.id+'" data-pode="'+(u.pode_excluir?0:1)+'">'+(u.pode_excluir?'Revogar excluir':'Permitir excluir')+'</button>':'')+
+    (!isMaster?'<button class="btn sm" data-act="togglemanage" data-id="'+u.id+'" data-pode="'+(u.pode_gerenciar_usuarios?0:1)+'">'+(u.pode_gerenciar_usuarios?'Revogar gestão':'Permitir gestão')+'</button>':'')+
+    (!isAdmin?'<button class="btn sm" data-act="togglepainel" data-id="'+u.id+'" data-pode="'+(u.pode_ver_painel?0:1)+'">'+(u.pode_ver_painel?'Revogar painel':'Permitir painel')+'</button>':'')+
+    (!isAdmin?'<button class="btn sm" data-act="toggleedit" data-id="'+u.id+'" data-pode="'+(u.pode_editar?0:1)+'">'+(u.pode_editar?'Revogar alterar':'Permitir alterar')+'</button>':'')+
     (!isEu&&!isMaster?'<button class="btn danger sm" data-act="deluser" data-id="'+u.id+'" data-nome="'+esc(u.nome)+'">'+ic('trash')+'Excluir</button>':'')+
     '</div></div>';
   }).join('');
@@ -888,7 +895,7 @@ async function cadastrarUsuario(){
   toast('Erro ao conectar ao servidor.');
  }finally{
   cadUserBusy=false;
-  if(btn){btn.disabled=false;btn.innerHTML=ic('plus')+'Cadastrar Usuário';}
+  if(btn){btn.disabled=false;btn.innerHTML=ic('plus')+'Cadastrar';}
  }
 }
 
@@ -969,6 +976,13 @@ async function carregaItensCarga(cid){ // todas as etiquetas de uma carga (para 
   if(res.ok){const d=await res.json();if(d&&Array.isArray(d.registros))guardaNoCache(d.registros);}
  }catch(e){}
 }
+async function carregaDesenhos(){ // desenhos já registrados (para sugerir o certo quando a leitura vem cortada)
+ if(!Auth.token)return;
+ try{
+  const res=await fetch('/api/desenhos',{headers:{'authorization':'Bearer '+Auth.token}});
+  if(res.ok){const d=await res.json();if(d&&Array.isArray(d.desenhos)){S.desenhos=d.desenhos.map(x=>({d:x.d,n:x.n}));atualizaSugestaoDesenho();}}
+ }catch(e){}
+}
 async function carregaLocalizacoes(){
  if(!Auth.token)return;
  try{
@@ -1000,7 +1014,7 @@ async function sincronizarRegistrosComBanco(){
   }
   limpaAparelho(); // enxuga o que o servidor já confirmou (em segundo plano)
   const cs=cargaSalva();if(cs)await carregaItensCarga(cs.id);
-  carregaLocalizacoes();
+  carregaLocalizacoes();carregaDesenhos();
   if(filtroPadrao()){ // sem filtros: a própria 1ª página já é a lista do Histórico
    S.hist.seq++;S.hist.ids=data.registros.map(r=>r.id);S.hist.temMais=!!data.temMais;S.hist.proximo=data.proximo||null;S.hist.fresco=true;S.hist.erro='';S.hist.busy=false;
    render();
@@ -1084,11 +1098,20 @@ function calcHtml(){
   box(barra?'Massa linear nominal':'Massa linear',c?nf(c.kgm,3):'—','kg/m')+'</div>';
 }
 
+// Impressão sobreposta ("144/FL11" lido como "144FL1"): se o desenho lido é pouco comum e parece um conhecido com caractere a menos, sugere os parecidos
+function sugestaoDesenhoHtml(){
+ const v=S.form.desenho;if(!v)return '';
+ const s=PainelCalc.desenhosParecidos(v,S.desenhos||[]);
+ if(!s.length)return '';
+ return '<div class="note" style="margin:0;border-left:4px solid var(--accent)"><b>Desenho pouco comum: “'+esc(v)+'”.</b> Se a impressão “comeu” um caractere, escolha o certo: '+s.map(d=>'<button type="button" class="chip" data-act="usadesenho" data-v="'+esc(d)+'">'+esc(d)+'</button>').join(' ')+'</div>';
+}
+function atualizaSugestaoDesenho(){const n=$('#sug-desenho');if(n)n.innerHTML=sugestaoDesenhoHtml();}
 function acoFields(){return ""+
   fld({k:'os',l:'Nº da OS',req:1,im:'numeric',ph:'ex.: 8'})+
   fld({k:'cod',l:'Código da etiqueta',im:'numeric',ph:'ex.: 4512077394',hint:'Preenchido pelo código de barras quando o aparelho lê.'})+
   fld({k:'cpt',l:'Código CPT / CPM / DF',full:1,cls:'plate',ph:'ex.: CPT25R ou DF301C',max:12,cap:1,hint:'Código em destaque na etiqueta (CPT, CTP, CPM ou DF).'})+
   fld({k:'desenho',l:'Desenho',ph:'ex.: 231-1'})+
+  '<div class="f full" id="sug-desenho">'+sugestaoDesenhoHtml()+'</div>'+
   fld({k:'posicao',l:'Posição',ph:'ex.: 20'})+
   fld({k:'elemento',l:'Elemento',list:'dl-elem',ph:'ex.: PILAR'})+
   fld({k:'cj',l:'CJ (conjunto)',ph:'ex.: 13'})+
@@ -1145,7 +1168,7 @@ function vForm(){
   fld({k:'controlador',l:'Controlador',req:1,ph:'Seu nome'})+
   fld({k:'obs',l:'Observações',area:1,full:1,ph:'Avarias, divergências, ressalvas'})+
   '</div></div>'+
- '<div class="sticky-cta">'+errs+'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="submit"'+(S.submitting?' disabled':'')+'>'+ic('check')+'Registrar '+o.label.toLowerCase()+'</button></div>';
+ '<div class="sticky-cta">'+errs+'<button class="btn acc block" style="min-height:48px;font-size:16px" data-act="submit"'+(S.submitting?' disabled':'')+'>'+ic('check')+'Registrar '+o.label.toLowerCase()+'</button></div>';
 }
 
 function prodName(r){return r.prod==='cord'?'Cordoalha':r.prod==='barra'?'Barra reta':'Aço pronto';}
@@ -1166,8 +1189,8 @@ function vDone(){
  '<div class="muted" style="font-size:14px">Salvo com sucesso no banco de dados centralizado.</div></div>'+
  '<div class="card pad mt">'+dlHtml(r)+'</div>'+
  '<div class="sticky-cta">'+(emCarga
-  ?'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="nextcarga">'+ic('plus')+'Próxima etiqueta desta carga ('+cargaItens().length+' registradas)</button><button class="btn block" data-act="endcarga">'+ic('check')+'Encerrar carga</button>'
-  :'<button class="btn acc block" style="min-height:54px;font-size:17px" data-act="again">'+ic('plus')+'Novo registro</button><button class="btn block" data-act="nextcarga">'+ic('list')+'Próxima etiqueta da mesma carga</button>')+
+  ?'<button class="btn acc block" style="min-height:46px;font-size:16px" data-act="nextcarga">'+ic('plus')+'Próxima etiqueta ('+cargaItens().length+')</button><button class="btn block" data-act="endcarga">'+ic('check')+'Encerrar carga</button>'
+  :'<button class="btn acc block" style="min-height:46px;font-size:16px" data-act="again">'+ic('plus')+'Novo registro</button><button class="btn block" data-act="nextcarga">'+ic('list')+'Próxima etiqueta</button>')+
  '<div class="row"><button class="btn" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="gohist">'+ic('list')+'Histórico</button>'+
   (emCarga?'':'<button class="btn pri" data-act="again">'+ic('check')+'Finalizar</button>')+'</div></div>';
 }
@@ -1256,7 +1279,7 @@ function pnBarra(R){
   pnSel('periodo','Período',per,custom?'Personalizado':f.periodo)+
   '<div class="f"><label for="pf-de">De (opcional)</label><input id="pf-de" data-pf="de" type="date" value="'+esc(f.de)+'"></div>'+
   '<div class="f"><label for="pf-ate">Até (opcional)</label><input id="pf-ate" data-pf="ate" type="date" value="'+esc(f.ate)+'"></div>'+
-  '</div><div class="pn-acts"><button class="btn sm" data-act="pn-limpar">Limpar filtros</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
+  '</div><div class="pn-acts"><button class="btn sm" data-act="pn-limpar">Limpar</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
   '<span class="grow">'+(PX.gerado?(PX.origem==='local'?'Dados salvos neste aparelho (sem conexão) · ':'Dados do banco · ')+'atualizado às '+new Date(PX.gerado).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+' · '+R.totalBase+' registros na base':'')+'</span></div></div>';
 }
 function hbar(rot,val,max,seg,sub){
@@ -1352,7 +1375,7 @@ function acBarra(R){
   selHtml('af','periodo','Período',per,custom?'Personalizado':f.periodo)+
   '<div class="f"><label for="af-de">De (opcional)</label><input id="af-de" data-af="de" type="date" value="'+esc(f.de)+'"></div>'+
   '<div class="f"><label for="af-ate">Até (opcional)</label><input id="af-ate" data-af="ate" type="date" value="'+esc(f.ate)+'"></div>'+
-  '</div><div class="pn-acts"><button class="btn sm" data-act="ac-limpar">Limpar filtros</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
+  '</div><div class="pn-acts"><button class="btn sm" data-act="ac-limpar">Limpar</button><button class="btn sm" data-act="pn-refresh">'+ic('swap')+'Atualizar dados</button>'+
   '<span class="grow">'+(PX.gerado?(PX.origem==='local'?'Dados salvos neste aparelho (sem conexão) · ':'Dados do banco · ')+'atualizado às '+new Date(PX.gerado).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+' · '+R.totalAcoPronto+' etiquetas de aço pronto na base':'')+'</span></div></div>';
 }
 function acBody(R){
@@ -1499,19 +1522,47 @@ async function openRecord(id){
   ? '<div class="photos3">'+phKeys.map(k=>'<figure><img src="'+(r.photos[k]?r.photos[k].data:'')+'" alt="'+esc(PH[k]?PH[k].t:k)+'" data-act="zoomrec" data-id="'+r.id+'" data-k="'+k+'"><figcaption>'+({etiqueta:'Etiqueta',placa:'Placa',cracha:'Doc. / Crachá',notafiscal:'Nota Fiscal'})[k]+'</figcaption></figure>').join('')+'</div>'
   : '<div class="note">Fotos detalhadas não disponíveis offline.</div>';
  sheet(r.protocolo,phHtml+'<div class="card pad mt">'+dlHtml(r)+'</div>'+alteracoesHtml(r),
- '<div class="row mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="addcarga" data-id="'+r.id+'">'+ic('plus')+'Adicionar etiqueta a esta carga</button>'+btnAlterar+btnExcluir+'</div>');
+ '<div class="acts mt"><button class="btn pri" data-act="comprovante" data-id="'+r.id+'">'+ic('download')+'Comprovante</button><button class="btn" data-act="addcarga" data-id="'+r.id+'" title="Adicionar etiqueta a esta carga">'+ic('plus')+'Etiqueta</button>'+btnAlterar+btnExcluir+'</div>');
 }
 function alteracoesHtml(r){ // quem alterou o registro depois de salvo, quando e o que mudou
  const h=Array.isArray(r.alteracoes)?r.alteracoes:[];if(!h.length)return '';
- const nome={patio:'Pátio',placa:'Placa',motorista:'Motorista',empresa:'Empresa',cracha:'Documento',destino:'Localização',autorizador:'Autorizado por',obs:'Observações'};
- return '<div class="note mt"><b>Alterações neste registro</b>'+h.slice().reverse().map(a=>'<div style="margin-top:6px">'+esc(fdt(a.em))+' · '+esc(a.por||'')+': '+Object.keys(a.para||{}).map(k=>esc(nome[k]||k)+' de “'+esc((a.de||{})[k]||'—')+'” para “'+esc(a.para[k]||'—')+'”').join('; ')+'</div>').join('')+'</div>';
+ const nome={patio:'Pátio',placa:'Placa',motorista:'Motorista',empresa:'Empresa',cracha:'Documento',destino:'Localização',autorizador:'Autorizado por',obs:'Observações',os:'OS',cod:'Código',cpt:'CPT',desenho:'Desenho',posicao:'Posição',elemento:'Elemento',cj:'CJ',bitola:'Bitola',aco:'Aço',comp:'Comprimento',qtd:'Barras',kg:'Peso (kg)',m:'Metros',marca:'Marca',feixe:'Feixe',corrida:'Corrida',material:'Material',lote:'Lote',norma:'Norma',ordem:'Ordem',descricao:'Descrição',torcao:'Torção',resist:'Resistência',espessura:'Espessura',pbruto:'Peso bruto',re:'RE',datafab:'Fabricação',barrasContadas:'Barras contadas'};
+ const fmtV=v=>typeof v==='number'?String(Math.round(v*1000)/1000):typeof v==='boolean'?(v?'sim':'não'):(v==null||v===''?'—':String(v));
+ return '<div class="note mt"><b>Alterações neste registro</b>'+h.slice().reverse().map(a=>'<div style="margin-top:6px">'+esc(fdt(a.em))+' · '+esc(a.por||'')+': '+Object.keys(a.para||{}).map(k=>esc(nome[k]||k)+' de “'+esc(fmtV((a.de||{})[k]))+'” para “'+esc(fmtV(a.para[k]))+'”').join('; ')+'</div>').join('')+'</div>';
+}
+// Campos do Alterar por produto: [chave no registro, rótulo, tipo, largura inteira?]. É a mesma lista para todos os registros do mesmo produto.
+const CAMPOS_EDIT={
+ aco:[['os','Nº da OS'],['cod','Código da etiqueta'],['cpt','CPT / CPM / DF','cpt'],['desenho','Desenho'],['posicao','Posição'],['elemento','Elemento','elem'],['cj','CJ (conjunto)'],['bitola','Bitola (mm)','bitola'],['aco','Tipo de aço','acos'],['comp','Comprimento (cm)','num'],['qtd','Barras','int']],
+ barra:[['marca','Marca / produto','','full'],['aco','Categoria do aço','cat'],['bitola','Bitola (mm)','bitola'],['comp','Comprimento (m)','metros'],['kg','Peso líquido (kg)','num'],['qtd','Barras (se contadas)','int'],['feixe','Feixe'],['corrida','Corrida'],['material','Material'],['lote','Lote'],['norma','Norma'],['cod','Código de barras','','full']],
+ cord:[['material','Material'],['ordem','Ordem de produção'],['descricao','Descrição','','full'],['aco','Aço (classe)'],['bitola','Diâmetro (mm)','diam'],['norma','Norma'],['torcao','Sentido de torção','torcao'],['resist','Resistência'],['espessura','Espessura mínima'],['pbruto','Peso bruto (kg)','num'],['kg','Peso líquido (kg)','num'],['m','Metragem (m)','num'],['re','RE'],['datafab','Data de fabricação'],['cod','Código de barras']]
+};
+function valorEdit(r,k,tipo){ // valor inicial do campo, no formato que o operador digita (vírgula decimal)
+ const x=r[k];
+ if(tipo==='metros')return x?String(Math.round(x)/100).replace('.',','):'';
+ if(tipo==='bitola')return x?Number(x).toFixed(1):'';
+ if(tipo==='int'&&r.prod==='barra'&&k==='qtd')return r.barrasContadas&&x?String(x):'';   // barras estimadas ficam em branco
+ if(tipo==='num'||tipo==='int'||tipo==='diam')return x==null||x===''?'':String(Math.round(Number(x)*1000)/1000).replace('.',',');
+ return x==null?'':String(x);
 }
 function editRecSheet(r,cargaN){
- const f=(k,l,v,extra)=>'<div class="f'+(k==='motorista'||k==='destino'||k==='obs'?' full':'')+'"><label for="er-'+k+'">'+esc(l)+'</label><input id="er-'+k+'" value="'+esc(v||'')+'"'+(extra||'')+' autocomplete="off"></div>';
- return '<p class="muted" style="margin-top:0">Corrija os dados deste registro. A alteração fica registrada com seu nome, a data e o valor anterior.</p>'+
+ const prod=r.prod||'aco',campos=CAMPOS_EDIT[prod]||[];
+ const inp=(k,l,tipo,full,v,extra)=>'<div class="f'+(full?' full':'')+'"><label for="er-'+k+'">'+esc(l)+'</label>'+
+  (tipo==='bitola'?'<select id="er-'+k+'">'+(v?'':'<option value=""></option>')+Object.keys(KGM).concat(v&&!KGM[v]?[v]:[]).map(b=>'<option value="'+b+'"'+(b===v?' selected':'')+'>'+nf(b,1)+' mm</option>').join('')+'</select>'
+  :tipo==='acos'?'<select id="er-'+k+'">'+(ACOS.indexOf(v)<0?'<option value="'+esc(v)+'" selected>'+esc(v||'—')+'</option>':'')+ACOS.map(a=>'<option value="'+a+'"'+(a===v?' selected':'')+'>'+a+'</option>').join('')+'</select>'
+  :tipo==='torcao'?'<select id="er-'+k+'"><option value="DIREITA"'+(v==='DIREITA'?' selected':'')+'>Direita</option><option value="ESQUERDA"'+(v==='ESQUERDA'?' selected':'')+'>Esquerda</option></select>'
+  :'<input id="er-'+k+'" value="'+esc(v)+'"'+(['num','int','metros','diam'].indexOf(tipo)>-1?' inputmode="decimal"':'')+(extra||'')+' autocomplete="off">')+'</div>';
+ const material=campos.map(([k,l,t,full])=>inp(k,l,t,full,valorEdit(r,k,t),k==='cpt'?' maxlength="12" autocapitalize="characters"':k==='elemento'?' list="dl-elem-er"':k==='aco'&&t==='cat'?' list="dl-cat-er"':'')).join('');
+ const o=OPS[r.op];
+ return '<p class="muted" style="margin:0 0 8px">Corrija o que estiver errado. Cada alteração fica registrada com seu nome, a data e o valor anterior.</p>'+
+  '<h3 class="subt">'+(prod==='cord'?'Cordoalha':prod==='barra'?'Barra reta':'Aço pronto')+'</h3><div class="grid">'+material+'</div>'+
+  (prod==='aco'?'<div class="hint">O peso e os metros são recalculados pela bitola, comprimento e barras.</div>':prod==='barra'?'<div class="hint">Os metros e, se as barras não foram contadas, a quantidade são recalculados pelo peso.</div>':'')+
+  '<datalist id="dl-elem-er">'+ELEM.map(x=>'<option value="'+x+'">').join('')+'</datalist><datalist id="dl-cat-er"><option value="CA-25"><option value="CA-50"><option value="CA-50S"><option value="CA-60"></datalist>'+
+  '<h3 class="subt">Pátio, veículo e local</h3><div class="grid">'+
   '<div class="f full"><label for="er-patio">Pátio</label><select id="er-patio">'+PATIOS.map(p=>'<option value="'+esc(p)+'"'+(r.patio===p?' selected':'')+'>'+esc(p)+'</option>').join('')+'</select></div>'+
-  '<div class="grid" style="margin-top:10px">'+f('placa','Placa do caminhão',r.placa,' maxlength="7" autocapitalize="characters"')+f('cracha','Nº do documento / crachá',r.cracha)+f('motorista','Nome do motorista',r.motorista)+f('empresa','Empresa / transportadora',r.empresa)+f('destino',OPS[r.op].destL,r.destino,' list="dl-ruas"')+f('autorizador',OPS[r.op].autL,r.autorizador)+f('obs','Observações',r.obs)+'</div>'+ruasDatalist()+
-  (cargaN>1?'<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;margin-top:12px"><input type="checkbox" id="er-carga" checked style="width:20px;height:20px"><span>Aplicar também às outras '+(cargaN-1)+' etiquetas desta carga (pátio, placa, motorista, empresa, documento, localização e autorizador)</span></label>':'')+
+  inp('placa','Placa do caminhão','',false,r.placa||'',' maxlength="7" autocapitalize="characters"')+inp('cracha','Nº do documento / crachá','',false,r.cracha||'')+
+  inp('motorista','Nome do motorista','',true,r.motorista||'')+inp('empresa','Empresa / transportadora','',false,r.empresa||'')+
+  inp('destino',o.destL,'',false,r.destino||'',' list="dl-ruas"')+inp('autorizador',o.autL,'',false,r.autorizador||'')+inp('obs','Observações','',true,r.obs||'')+'</div>'+ruasDatalist()+
+  (cargaN>1?'<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:600;margin-top:12px"><input type="checkbox" id="er-carga" checked style="width:20px;height:20px"><span>Aplicar também às outras '+(cargaN-1)+' etiquetas da carga (pátio, placa, motorista, empresa, documento, local e autorizador)</span></label>':'')+
   alteracoesHtml(r);
 }
 function zoom(src){layer.insertAdjacentHTML('beforeend','<div class="lightbox" data-act="closezoom"><button class="iconbtn" aria-label="Fechar imagem" data-act="closezoom">'+ic('x')+'</button><img src="'+src+'" alt="Foto ampliada"></div>');}
@@ -1798,6 +1849,7 @@ function setField(k,v){
  const el=$('#f-'+k);
  if(el){el.value=String(v);const f=el.closest('.f');if(f){f.classList.add('auto');f.classList.remove('err');const em=f.querySelector('.em');if(em)em.remove();const lb=f.querySelector('label');if(lb&&!lb.querySelector('.autotag'))lb.insertAdjacentHTML('beforeend',' <span class="autotag">lido da foto</span>');}}
  delete S.errs[k];
+ if(k==='desenho')atualizaSugestaoDesenho();
  return true;
 }
 function blobToB64(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(b);});}
@@ -1998,22 +2050,33 @@ document.addEventListener('click',async ev=>{
  if(a==='filter'){S.filter=t.dataset.f;render();mudouFiltro();return;}
  if(a==='more'){carregaHistorico(S.hist.erro&&!S.hist.proximo);return;}
  if(a==='open'){openRecord(t.dataset.id);return;}
+ if(a==='usadesenho'){
+  const el=$('#f-desenho');S.form.desenho=t.dataset.v;if(el)el.value=t.dataset.v;delete S.auto.desenho;
+  const ff=el&&el.closest('.f');if(ff){ff.classList.remove('auto');const at=ff.querySelector('.autotag');if(at)at.remove();}
+  atualizaSugestaoDesenho();return;
+ }
  if(a==='editrec'){
   if(!userPodeEditar(Auth.user)){toast('Você não tem permissão para alterar registros.');return;}
   const r=S.records.find(x=>x.id===t.dataset.id);if(!r)return;
   if(Fila.ids().indexOf(r.id)>-1){toast('Este registro ainda não foi enviado ao servidor. Aguarde o envio para alterar.');return;}
   if(r.carga)await carregaItensCarga(r.carga);
   const n=r.carga?S.records.filter(x=>x.carga===r.carga||x.id===r.carga).length:0;
-  sheet('Alterar registro · '+r.protocolo,editRecSheet(r,n),'<div class="row mt"><button class="btn pri" data-act="saverec" data-id="'+r.id+'">'+ic('check')+'Salvar alteração</button><button class="btn" data-act="closelayer">Cancelar</button></div>');
+  sheet('Alterar · '+r.protocolo,editRecSheet(r,n),'<div class="acts mt"><button class="btn pri" data-act="saverec" data-id="'+r.id+'">'+ic('check')+'Salvar</button><button class="btn" data-act="closelayer">Cancelar</button></div>');
   return;
  }
  if(a==='saverec'){
   const r=S.records.find(x=>x.id===t.dataset.id);if(!r)return;
-  const v=k=>($('#er-'+k)?$('#er-'+k).value:'').trim();
+  const prod=r.prod||'aco',v=k=>($('#er-'+k)?$('#er-'+k).value:'').trim();
+  const comum=['patio','placa','cracha','motorista','empresa','destino','autorizador','obs'];
   const campos={patio:v('patio'),placa:v('placa').toUpperCase().replace(/[^A-Z0-9]/g,''),cracha:v('cracha'),motorista:v('motorista'),empresa:v('empresa'),destino:v('destino'),autorizador:v('autorizador'),obs:v('obs')};
+  (CAMPOS_EDIT[prod]||[]).forEach(([k,l,tp])=>{ // só vão os campos do material que o operador mexeu
+   const val=v(k);if(val===valorEdit(r,k,tp))return;
+   campos[k]=tp==='metros'&&numBR(val)>0?String(Math.round(numBR(val)*100)):val;   // a barra guarda o comprimento em cm
+  });
+  if(campos.cpt)campos.cpt=campos.cpt.toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(campos.placa)){toast('Placa inválida. Use o formato ABC1D23 ou ABC1234');return;}
   if(!campos.motorista||!campos.destino||!campos.autorizador){toast('Preencha motorista, localização e autorizador.');return;}
-  if(Object.keys(campos).every(k=>(r[k]||'')===campos[k])){toast('Nenhum dado foi alterado.');return;}
+  if(!Object.keys(campos).some(k=>comum.indexOf(k)<0||(r[k]||'')!==campos[k])){toast('Nenhum dado foi alterado.');return;}
   const cargaInteira=!!($('#er-carga')&&$('#er-carga').checked);
   t.disabled=true;
   try{
@@ -2107,7 +2170,7 @@ document.addEventListener('click',async ev=>{
    toast('Erro de conexão ao salvar nome.');
    return false;
   }finally{
-   if(btnEl){ btnEl.disabled = false; btnEl.textContent = 'Salvar Nome'; }
+   if(btnEl){ btnEl.disabled = false; btnEl.textContent = 'Salvar'; }
   }
  }
 
@@ -2118,7 +2181,7 @@ document.addEventListener('click',async ev=>{
    '<div class="grid">'+
    '<div class="f full"><label for="s-pwd-nova">Nova Senha</label><input id="s-pwd-nova" type="password" placeholder="Mínimo 4 caracteres" autocomplete="new-password"></div>'+
    '<div class="f full"><label for="s-pwd-conf">Confirmar Nova Senha</label><input id="s-pwd-conf" type="password" placeholder="Digite a nova senha novamente" autocomplete="new-password"></div>'+
-   '</div><div class="row mt"><button class="btn pri block" data-act="alterarminhasenha" style="font-weight:700">Salvar Nova Senha</button></div></div>'
+   '</div><div class="row mt"><button class="btn pri block" data-act="alterarminhasenha" style="font-weight:700">Salvar senha</button></div></div>'
   );
   return;
  }
@@ -2158,7 +2221,7 @@ document.addEventListener('click',async ev=>{
    '</div>'+
    '<p class="hint muted" style="font-size:12.5px;margin:10px 0 0">O nome atualizado será gravado nos novos registros e no carimbo das fotos.</p>'+
    '<div class="row mt">'+
-   '<button class="btn pri block" id="btn-save-modal-nome" data-act="doeditnome" data-id="' + id + '" style="font-weight:700">Salvar Nome</button>'+
+   '<button class="btn pri block" id="btn-save-modal-nome" data-act="doeditnome" data-id="' + id + '" style="font-weight:700">Salvar</button>'+
    '</div>'+
    '</div>'
   );
@@ -2184,7 +2247,7 @@ document.addEventListener('click',async ev=>{
   if($('#wrap-u-excluir')) $('#wrap-u-excluir').style.display = 'none';
   if($('#wrap-u-gerenciar')) $('#wrap-u-gerenciar').style.display = 'none';
   $('#cad-user-actions').innerHTML = 
-   '<button type="button" class="btn pri" id="btn-salvar-edicao" data-act="dosaveditar" data-id="' + id + '" style="font-weight:700">Salvar Alteração de Nome</button>'+
+   '<button type="button" class="btn pri" id="btn-salvar-edicao" data-act="dosaveditar" data-id="' + id + '" style="font-weight:700">Salvar</button>'+
    '<button type="button" class="btn sec" data-act="cancelareditar" style="font-weight:600">Cancelar</button>';
   box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   $('#u-nome').focus();
@@ -2207,7 +2270,7 @@ document.addEventListener('click',async ev=>{
    fetch('/api/auth/logout',{method:'POST',headers:{'authorization':'Bearer '+Auth.token}}).catch(()=>{});
    Auth.clear();
    pnReset();
-   S.records=[];S.locais=[];S.protoMax={};S.srvIds=null;
+   S.records=[];S.locais=[];S.desenhos=[];S.protoMax={};S.srvIds=null;
    clearTimeout(timerBusca);S.hist={ids:[],temMais:false,proximo:null,busy:false,fresco:false,erro:'',seq:S.hist.seq+1};
    S.tab='novo';
    S.op=null;
@@ -2222,7 +2285,7 @@ document.addEventListener('click',async ev=>{
  }
  if(a==='resetpwd'){
   const id=t.dataset.id,nome=t.dataset.nome;
-  if(await confirmBox('Resetar a senha de "'+nome+'"? A senha provisória será "1234" e o usuário deverá cadastrar uma nova senha pessoal no próximo acesso.','Resetar Senha')){
+  if(await confirmBox('Resetar a senha de "'+nome+'"? A senha provisória será "1234" e o usuário deverá cadastrar uma nova senha pessoal no próximo acesso.','Resetar senha')){
    try{
     const res=await fetch('/api/usuarios/'+id+'/reset-senha',{
      method:'POST',
@@ -2355,6 +2418,7 @@ document.addEventListener('input',ev=>{
  if(k==='placa'){v=v.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,7);t.value=v;}
  if(k==='cpt'){v=v.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);t.value=v;}
  S.form[k]=v;
+ if(k==='desenho')atualizaSugestaoDesenho();
  if(S.auto[k]){delete S.auto[k];const ff=t.closest('.f');if(ff){ff.classList.remove('auto');const at=ff.querySelector('.autotag');if(at)at.remove();}}
  if(S.errs[k]){delete S.errs[k];const f=t.closest('.f');if(f){f.classList.remove('err');const em=f.querySelector('.em');if(em)em.remove();}}
  if(['comp','qtd','bitola','pliq','metragem','compm'].indexOf(k)>-1){const w=$('#calcwrap');if(w)w.innerHTML=calcHtml();}

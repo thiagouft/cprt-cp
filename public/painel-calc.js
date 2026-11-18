@@ -33,6 +33,14 @@
     var n = parseFloat(s);
     return isFinite(n) ? n : 0;
   }
+  // Massa linear (kg/m) por bitola do aço (mm), a mesma tabela do cadastro. Peso do aço pronto = comprimento × barras × kg/m.
+  var KGM = { '5.0': 0.154, '6.3': 0.245, '8.0': 0.395, '10.0': 0.617, '12.5': 0.963, '16.0': 1.578, '20.0': 2.466, '25.0': 3.853, '32.0': 6.313, '40.0': 9.865 };
+  function pesoAco(bitola, compCm, qtd) { // devolve { m, kg, kgm } ou null se faltar dado
+    var k = KGM[bitola];
+    if (!k || !(compCm > 0) || !(qtd > 0)) return null;
+    var m = compCm / 100 * qtd;
+    return { m: m, kg: m * k, kgm: k };
+  }
   // Diâmetro da cordoalha (mm). A etiqueta imprime 3 casas ("12,700"; "15,701"): aqui o ponto NUNCA é separador de milhar.
   // "12.700" lido como milhar virou 12700 (e 15.200 virou 15200). Valores >= 100 voltam a ser mm (/1000) e tudo vai ao tamanho
   // nominal de 1 casa (12,7 / 15,2 / 15,7), para a mesma cordoalha cair sempre no mesmo grupo. Devolve null se não houver valor.
@@ -97,6 +105,37 @@
     var d = str(desenho).trim(), m = RE_DES_FL.exec(d);
     if (!m || !mapa || mapa[m[1]] === undefined) return d;
     return m[1] + mapa[m[1]] + m[3].toUpperCase();
+  }
+  /* ---------- Sugestão de desenho (impressão sobreposta: "144/FL11" lido como "144FL1") ----------
+   * Dado o desenho lido e a lista dos desenhos já registrados ([{d, n}]), devolve até 4 desenhos conhecidos que podem ser o certo:
+   * o lido é o começo deles (até 2 caracteres a menos) ou lhes falta um caractere. Só sugere se o lido é pouco usado (menos de 2
+   * registros) e só sugere desenhos usados 2 vezes ou mais. A comparação ignora "/", "-" e espaços. */
+  function chaveDes(v) { return str(v).trim().toUpperCase().replace(/[\s\/-]/g, ''); }
+  function faltaUmChar(longo, curto) {
+    if (longo.length !== curto.length + 1) return false;
+    for (var i = 0; i < longo.length; i++) if (longo.slice(0, i) + longo.slice(i + 1) === curto) return true;
+    return false;
+  }
+  function desenhosParecidos(valor, conhecidos, max) {
+    var x = chaveDes(valor);
+    if (x.length < 3 || !conhecidos || !conhecidos.length) return [];
+    var por = {};
+    conhecidos.forEach(function (c) {
+      var k = chaveDes(c.d);
+      if (!k) return;
+      var n = Number(c.n) || 0, g = por[k] || (por[k] = { d: '', n: 0, melhor: -1 });
+      g.n += n;
+      if (n > g.melhor) { g.melhor = n; g.d = str(c.d).trim(); }
+    });
+    if (por[x] && por[x].n >= 2) return [];   // desenho conhecido e usado mais de uma vez
+    var cand = [];
+    Object.keys(por).forEach(function (k) {
+      var h = por[k];
+      if (k === x || h.n < 2) return;
+      if ((k.indexOf(x) === 0 && k.length - x.length <= 2) || faltaUmChar(k, x)) cand.push(h);
+    });
+    cand.sort(function (a, b) { return b.n - a.n; });
+    return cand.slice(0, max || 4).map(function (h) { return h.d; });
   }
   // Procura um elemento padrão no FIM do texto ("219-FL11NICHO" -> prefixo "219-FL11" + NICHO). O que vem antes tem que terminar em número.
   function fimElemento(texto, mapa) {
@@ -629,7 +668,7 @@
   }
 
   return {
-    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao, separaDesenhoElemento: separaDesenhoElemento, mapaDesenhos: mapaDesenhos, desenhoPadrao: desenhoPadrao,
+    chaveEtiqueta: chaveEtiqueta, diametroCord: diametroCord, KGM: KGM, pesoAco: pesoAco, mapaElementos: mapaElementos, elementoPadrao: elementoPadrao, separaDesenhoElemento: separaDesenhoElemento, mapaDesenhos: mapaDesenhos, desenhoPadrao: desenhoPadrao, desenhosParecidos: desenhosParecidos,
     COLUNAS: COLUNAS, BITOLAS: BITOLAS, PERIODOS: PERIODOS, normalizar: normalizar, linha: linha, painel: painel, acoPronto: acoPronto,
     ruaPadrao: ruaPadrao, setModoPlanilha: setModoPlanilha, nomeCurto: nomeCurto, fmtNum: fmtNum, fmtData: fmtData, fmtHora: fmtHora, diaDeChave: diaDeChave, chaveDeDia: chaveDeDia
   };
