@@ -283,7 +283,7 @@ main.wide{padding-left:max(16px,calc((100% - 1280px)/2));padding-right:max(16px,
 <div id="toast-host"></div>
 
 <!-- O número depois de ?v= acompanha a versão do sw.js: endereço novo = nunca usa uma cópia velha do navegador. Mude os dois juntos a cada versão. -->
-<script src="painel-calc.js?v=47"></script>
+<script src="painel-calc.js?v=48"></script>
 <script>
 (function(){
 'use strict';
@@ -1298,25 +1298,26 @@ function pnBody(R){
  if(PX.carregando&&!PX.linhas.length)return '<div class="note mt">Carregando dados do banco…</div>';
  if(PX.erro)return '<div class="alert mt">'+esc(PX.erro)+'</div>';
  if(!R.totalBase)return '<div class="card empty pn-empty mt"><div class="ei" style="margin-bottom:8px">'+ic('chart')+'</div><b>Nenhum registro na base</b><div class="muted" style="margin-top:4px">Os indicadores aparecem assim que houver registros.</div></div>';
- const k=R.kpis,f=PX.f,j=R.janela,semSaldo=f.operacao==='Entrada'||f.operacao==='Retirada'; // saldo = entradas − retiradas: só faz sentido com as duas na conta
- const resumo='<b>'+nf(k.registros,0)+'</b> '+(k.registros===1?'registro':'registros')+' · <b>'+nf(k.pesoT,2)+' t</b> · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
+ const k=R.kpis,f=PX.f,j=R.janela,mSaldo=!!R.modoSaldo,semSaldo=f.operacao==='Entrada'||f.operacao==='Retirada'; // saldo = entradas − retiradas: só faz sentido com as duas na conta; modo Saldo = estoque por etiqueta
+ const resumo='<b>'+nf(k.registros,0)+'</b> '+(mSaldo?(k.registros===1?'etiqueta em estoque':'etiquetas em estoque'):(k.registros===1?'registro':'registros'))+' · <b>'+nf(k.pesoT,2)+' t</b> · período '+esc(j.iniTxt)+' a '+esc(j.fimTxt)+(j.trocado?' <span class="muted">(datas invertidas, ajustadas)</span>':'')+(f.busca.trim()?' · busca em '+esc(f.campo)+': “'+esc(f.busca.trim())+'”':'');
  const kp=(t,v,s,cls)=>'<div class="card pn-kpi"><div class="k">'+t+'</div><div class="v'+(cls?' '+cls:'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  const kpis='<div class="pn-kpis">'+
-  kp('Registros',nf(k.registros,0),'Placas: '+k.placas+' · Motoristas: '+k.motoristas)+
+  kp(mSaldo?'Etiquetas em estoque':'Registros',nf(k.registros,0),mSaldo?'Entraram e ainda não saíram':'Placas: '+k.placas+' · Motoristas: '+k.motoristas)+
   kp('Cargas',nf(k.cargas,0),'Média '+nf(k.etiquetasPorCarga,1)+' etiquetas / carga · maior '+nf(k.maiorCarga,0))+
-  kp('Entradas',nf(k.entradas,0),nf(k.pesoEntT,2)+' t recebidas')+
+  (mSaldo?'':kp('Entradas',nf(k.entradas,0),nf(k.pesoEntT,2)+' t recebidas')+
   kp('Retiradas',nf(k.retiradas,0),nf(k.pesoRetT,2)+' t retiradas')+
-  kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro')+
+  kp('Peso total','<span>'+nf(k.pesoT,2)+'</span> <small>t</small>','Média '+nf(k.mediaKg,0)+' kg / registro'))+
   kp('Barras (unid.)',nf(k.barras,0),nf(k.metros,0)+' metros')+
-  (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>','Entradas − Retiradas',pnSaldoCls(k.saldoT)))+'</div>';
- if(!k.registros)return '<div class="pn-sum">'+resumo+'</div>'+kpis+'<div class="card empty pn-empty mt"><b>Nenhum registro com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
+  (semSaldo?'':kp('Saldo no pátio','<span>'+nf(k.saldoT,2)+'</span> <small>t</small>',mSaldo?'Estoque por etiqueta · média '+nf(k.mediaKg,0)+' kg / etiqueta':'Entradas − Retiradas',pnSaldoCls(k.saldoT)))+'</div>';
+ const e=R.estoque,avisoSaldo=mSaldo&&e?'<div class="note mt">Modo <b>Saldo</b>: mostra só as etiquetas (de todos os produtos) que entraram e ainda não tiveram retirada correspondente. '+nf(e.casadas,0)+' etiquetas já saíram e foram retiradas da lista.'+(e.retiradasSemEntrada?' <b>'+nf(e.retiradasSemEntrada,0)+'</b> retiradas não têm entrada correspondente e foram ignoradas.':'')+(e.entradasSemChave?' '+nf(e.entradasSemChave,0)+' entradas sem dados para identificar a etiqueta foram mantidas.':'')+'</div>':'';
+ if(!k.registros)return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+'<div class="card empty pn-empty mt"><b>Nenhum registro com esses filtros</b><div class="muted" style="margin-top:4px">Troque o período, o pátio ou limpe a busca.</div></div>';
 
  // peso por dia (retirada x entrada)
  const dias=diasHtml(R.serie,PX.janela,'pn-janela','Peso movimentado nos 7 dias até a data final (t)','Peso movimentado por dia no período (t)');
 
  // por pátio
  const mp=Math.max(0.0001,...R.porPatio.map(p=>p.t));
- const patio='<div><h2 class="sec">Peso por pátio (t)</h2><div class="card pad">'+R.porPatio.map(p=>hbar(esc(p.patio),p.t,mp,null,nf(p.registros,0)+' registros · Entradas '+nf(p.entT,2)+' t · Retiradas '+nf(p.retT,2)+' t'+(semSaldo?'':' · Saldo <b class="'+pnSaldoCls(p.saldoT)+'">'+nf(p.saldoT,2)+' t</b>'))).join('')+'</div></div>';
+ const patio='<div><h2 class="sec">Peso por pátio (t)</h2><div class="card pad">'+R.porPatio.map(p=>hbar(esc(p.patio),p.t,mp,null,nf(p.registros,0)+(mSaldo?' etiquetas em estoque':' registros · Entradas '+nf(p.entT,2)+' t · Retiradas '+nf(p.retT,2)+' t')+(semSaldo||mSaldo?'':' · Saldo <b class="'+pnSaldoCls(p.saldoT)+'">'+nf(p.saldoT,2)+' t</b>'))).join('')+'</div></div>';
 
  // por controlador
  const mc=Math.max(0.0001,...R.porControlador.map(c=>c.t));
@@ -1342,8 +1343,8 @@ function pnBody(R){
  const tr=R.ultimos.map(u=>'<tr><td><span class="pill '+(u.operacao==='Retirada'?'ret':'mob')+'">'+esc(u.operacao)+'</span></td><td class="nw"><b>'+esc(u.placa)+'</b></td><td class="nw">'+esc(u.data)+'</td><td>'+esc(u.hora)+'</td><td class="nw">'+esc(u.patio)+'</td><td class="nw">'+esc(u.produto)+'</td><td class="r">'+(u.bitola==null?'':nf(u.bitola,u.bitola%1?1:0))+'</td><td class="r">'+(u.produto==='Cordoalha'?'':nf(u.barras,0))+'</td><td class="r">'+nf(u.kg,2)+'</td><td class="nw">'+esc(u.motorista)+'</td><td class="nw">'+esc(u.controlador)+'</td><td>'+esc(u.rua)+'</td></tr>').join('');
  const ult='<h2 class="sec">Últimos '+R.ultimos.length+' registros (filtros aplicados)</h2><div class="card pad pn-scroll"><table class="tbl"><thead><tr><th>Operação</th><th>Placa</th><th>Data</th><th>Hora</th><th>Pátio</th><th>Produto</th><th class="r">Bitola</th><th class="r">Barras</th><th class="r">Peso (kg)</th><th>Motorista</th><th>Controlador</th><th>Localização</th></tr></thead><tbody>'+tr+'</tbody></table></div>';
 
- return '<div class="pn-sum">'+resumo+'</div>'+kpis+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+cargas+ult+
-  '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.</div>';
+ return '<div class="pn-sum">'+resumo+'</div>'+kpis+avisoSaldo+dias+'<div class="pn-2">'+patio+ctl+'</div>'+bit+tabB+cargas+ult+
+  '<div class="note mt">Fonte: tabela de registros do sistema (mesmas colunas do Histórico e do CSV). Os números acompanham os filtros acima e são recalculados a cada alteração.'+(semSaldo?' Com Operação = '+esc(f.operacao)+' não há saldo (ele precisa de entradas e retiradas): escolha <b>Todas</b> para o saldo em números ou <b>Saldo</b> para o estoque por etiqueta.':mSaldo?' O modo Saldo só é confiável se as retiradas também forem lançadas.':'')+'</div>';
 }
 function diasHtml(serie,janela,act,t7,tp){
  const mx=Math.max(0.0001,...serie.map(d=>Math.max(d.ret,d.ent))),lab=serie.length<=14,larg=serie.length>14?30:0;

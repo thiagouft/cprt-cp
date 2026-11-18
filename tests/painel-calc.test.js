@@ -423,5 +423,34 @@ secao('Sugestão de desenho');
   check('só sugere desenhos usados 2+ vezes (não sugere 144/FL1 com 1 registro)', s('144FL').indexOf('144/FL1') < 0, JSON.stringify(s('144FL')));
 }
 
+/* =============== 11) Painel geral · modo "Saldo" (estoque por etiqueta, todos os produtos) =============== */
+secao('Painel geral · modo Saldo');
+{
+  const dia = (d, h) => new Date(2026, 10, d, h, 0).toISOString();
+  const base = { controlador: 'T', patio: 'Marabá', placa: 'AAA1A11', motorista: 'J', destino: 'CPRT' };
+  const A = (id, op, d, h, e) => Object.assign({ id, protocolo: id, op, at: dia(d, h), prod: 'aco', os: '1', cod: '4512', cpt: 'CPT1', desenho: '250', posicao: '1', cj: '1', elemento: 'LAJES', bitola: 16, aco: 'CA-50S', comp: 100, qtd: 10, m: 10, kg: 100 }, base, e || {});
+  const Bm = (id, op, d, h, e) => Object.assign({ id, protocolo: id, op, at: dia(d, h), prod: 'barra', marca: 'Arcelor', bitola: 20, comp: 1200, qtd: 80, kg: 1000, m: 400, cod: 'X1' }, base, e || {});
+  const Cd = (id, op, d, h, e) => Object.assign({ id, protocolo: id, op, at: dia(d, h), prod: 'cord', ordem: 'OP1', bitola: 12.7, kg: 3000, m: 3800, cod: 'C1' }, base, e || {});
+  const regs = [
+    A('a1', 'mob', 1, 8), A('a1r', 'ret', 2, 8), A('a2', 'mob', 1, 9, { posicao: '2', kg: 200 }),        // aço: a1 entrou e saiu; a2 em estoque
+    Bm('b1', 'mob', 1, 10), Bm('b1r', 'ret', 2, 10), Bm('b2', 'mob', 3, 10, { cod: 'X2', kg: 2000 }),    // barra: b1 saiu; b2 em estoque
+    Cd('c1', 'mob', 1, 11), Cd('c9', 'ret', 2, 11, { cod: 'C9' })                                          // cordoalha: c1 em estoque; retirada c9 sem entrada
+  ];
+  const L = PC.normalizar(regs), geral = PC.painel(L, { operacao: 'Todas' }, HOJE), s = PC.painel(L, { operacao: 'Saldo' }, HOJE);
+  check('opção "Saldo" existe em Operação no Painel geral', geral.opcoes.operacoes.includes('Saldo'), JSON.stringify(geral.opcoes.operacoes));
+  eq('Todas: saldo continua entradas − retiradas (t)', geral.kpis.saldoT, (100 + 200 + 1000 + 2000 + 3000 - 100 - 1000 - 3000) / 1000);
+  eq('Saldo: 3 etiquetas em estoque (aço a2, barra b2, cordoalha c1)', s.kpis.registros, 3);
+  eq('Saldo: peso em estoque (t)', s.kpis.saldoT, (200 + 2000 + 3000) / 1000);
+  eq('Saldo: sem retiradas na lista', s.kpis.retiradas, 0);
+  eq('Saldo: etiquetas casadas (a1 e b1)', s.estoque.casadas, 2); eq('Saldo: retirada sem entrada (c9)', s.estoque.retiradasSemEntrada, 1);
+  check('Saldo: modoSaldo só ligado em Saldo', s.modoSaldo === true && geral.modoSaldo === false && !geral.estoque);
+  eq('Saldo + Produto Barra reta: só a barra em estoque', PC.painel(L, { operacao: 'Saldo', produto: 'Barra reta' }, HOJE).kpis.registros, 1);
+  eq('Saldo + Produto Aço pronto: só a2', PC.painel(L, { operacao: 'Saldo', produto: 'Aço pronto' }, HOJE).kpis.saldoT, 0.2);
+  eq('Saldo: período filtra pela data da entrada (só o dia 3 → b2)', PC.painel(L, { operacao: 'Saldo', de: '2026-11-03', ate: '2026-11-03' }, HOJE).kpis.registros, 1);
+  eq('Saldo + Pátio inexistente: vazio', PC.painel(L, { operacao: 'Saldo', patio: 'São Félix' }, HOJE).kpis.registros, 0);
+  eq('Entrada e Retirada continuam como antes', PC.painel(L, { operacao: 'Entrada' }, HOJE).kpis.registros, 5);
+  eq('Saldo do Painel geral com Produto Aço pronto = Aço pronto/Saldo', PC.painel(L, { operacao: 'Saldo', produto: 'Aço pronto' }, HOJE).kpis.saldoT, PC.acoPronto(L, { operacao: 'Saldo' }, HOJE).kpis.saldoT);
+}
+
 console.log('\n' + (falhas ? '✗ ' + falhas + ' falha(s), ' + ok + ' ok' : '✓ ' + ok + ' verificações ok'));
 process.exit(falhas ? 1 : 0);

@@ -403,15 +403,18 @@
   function filtroPainel(linhas, f, hoje) {
     f = f || {};
     var lim = limites(linhas, f, hoje), base = [], fin = [], i, L, ok;
-    for (i = 0; i < linhas.length; i++) {
-      L = linhas[i];
+    // Operação = Saldo: só o que entrou e ainda não saiu, por etiqueta (todos os produtos; o casamento é feito antes dos demais filtros)
+    var modoSaldo = f.operacao === 'Saldo', est = null, fonte = linhas;
+    if (modoSaldo) { est = estoquePorEtiqueta(linhas); fonte = est.lista; }
+    for (i = 0; i < fonte.length; i++) {
+      L = fonte[i];
       ok = (todos(f.patio, 'Todos os pátios') || igual(L.patio, f.patio)) &&
-        (todos(f.operacao, 'Todas') || igual(L.operacao, f.operacao)) &&
+        (modoSaldo || todos(f.operacao, 'Todas') || igual(L.operacao, f.operacao)) &&
         (todos(f.produto, 'Todos') || igual(L.produto, f.produto)) &&
         buscaOk(L, f.campo, f.busca);
       if (ok) { base.push(L); if (L.dia >= lim.ini && L.dia <= lim.fim) fin.push(L); }
     }
-    return { lim: lim, base: base, fin: fin };
+    return { lim: lim, base: base, fin: fin, modoSaldo: modoSaldo, est: est };
   }
 
   function painel(linhas, f, hoje, opc) {
@@ -468,7 +471,7 @@
       janela: { ini: lim.ini, fim: lim.fim, iniTxt: fmtData(lim.ini), fimTxt: fmtData(lim.fim), trocado: lim.trocado },
       kpis: kpis, porPatio: porPatio, produtos: prods, porBitola: porBitola, totalBitola: totalBitola, porControlador: porControlador,
       serie: serieDias(E, lim.fim, opc.janela || 7, lim.ini), ultimos: ult, cargas: cg.lista,
-      opcoes: opcoesPainel(linhas), totalBase: linhas.length
+      opcoes: opcoesPainel(linhas), totalBase: linhas.length, modoSaldo: m.modoSaldo, estoque: m.est && m.est.info
     };
   }
   function opcoesPainel(linhas) {
@@ -478,7 +481,7 @@
       if (prod.indexOf(linhas[i].produto) < 0) prod.push(linhas[i].produto);
     }
     return {
-      patios: ['Todos os pátios'].concat(pat.sort(cmpTxt)), operacoes: ['Todas', 'Entrada', 'Retirada'],
+      patios: ['Todos os pátios'].concat(pat.sort(cmpTxt)), operacoes: ['Todas', 'Entrada', 'Retirada', 'Saldo'],
       produtos: ['Todos'].concat(['Aço pronto', 'Barra reta', 'Cordoalha'].filter(function (p) { return prod.indexOf(p) > -1; })),
       periodos: PERIODOS.slice(), campos: ['Todos os campos'].concat(COLUNAS)
     };
